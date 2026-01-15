@@ -15,7 +15,7 @@
         </li>
         <li class="nav-item">
             <button class="nav-link" id="funcionarios-tab" data-bs-toggle="tab" data-bs-target="#funcionarios" type="button">
-                <i class="bi bi-people"></i> Funcionários
+                <i class="bi bi-people"></i> Alunos
             </button>
         </li>
         <li class="nav-item">
@@ -42,7 +42,7 @@
                                 <input type="date" id="relDataInicio" class="form-control" style="width: auto;">
                                 <input type="date" id="relDataFim" class="form-control" style="width: auto;">
                                 <select id="relFuncionario" class="form-select" style="width: auto;">
-                                    <option value="">Todos os funcionários</option>
+                                    <option value="">Todos os alunos</option>
                                 </select>
                                 <button class="btn btn-primary" onclick="carregarRelatorio()">
                                     <i class="bi bi-search"></i> Filtrar
@@ -78,7 +78,7 @@
                         <div class="col-md-3">
                             <div class="card bg-success text-white">
                                 <div class="card-body text-center">
-                                    <h6>Funcionários</h6>
+                                    <h6>Alunos</h6>
                                     <span class="display-6" id="totalFuncionarios">0</span>
                                 </div>
                             </div>
@@ -101,13 +101,13 @@
                         </div>
                     </div>
 
-                    <!-- Tabela de Resumo por Funcionário -->
-                    <h5 class="mb-3">Resumo por Funcionário</h5>
+                    <!-- Tabela de Resumo por Aluno -->
+                    <h5 class="mb-3">Resumo por Aluno</h5>
                     <div class="table-responsive mb-4">
                         <table class="table table-hover">
                             <thead class="table-light">
                                 <tr>
-                                    <th>Funcionário</th>
+                                    <th>Aluno</th>
                                     <th>Matrícula</th>
                                     <th>Horas Trabalhadas</th>
                                     <th>Dias</th>
@@ -128,7 +128,7 @@
                                 <tr>
                                     <th>Data</th>
                                     <th>Hora</th>
-                                    <th>Funcionário</th>
+                                    <th>Aluno</th>
                                     <th>Matrícula</th>
                                     <th>Tipo</th>
                                     <th>Localização</th>
@@ -145,13 +145,13 @@
             </div>
         </div>
 
-        <!-- Tab Funcionários -->
+        <!-- Tab Alunos -->
         <div class="tab-pane fade" id="funcionarios" role="tabpanel">
             <div class="row">
                 <div class="col-lg-4 mb-4">
                     <div class="card shadow">
                         <div class="card-header bg-primary text-white">
-                            <h5 class="mb-0"><i class="bi bi-person-plus"></i> Novo Funcionário</h5>
+                            <h5 class="mb-0"><i class="bi bi-person-plus"></i> Novo Aluno</h5>
                         </div>
                         <div class="card-body">
                             <form id="formNovoFuncionario" onsubmit="cadastrarFuncionario(event)">
@@ -186,7 +186,7 @@
                 <div class="col-lg-8">
                     <div class="card shadow">
                         <div class="card-header">
-                            <h5 class="mb-0"><i class="bi bi-people"></i> Lista de Funcionários</h5>
+                            <h5 class="mb-0"><i class="bi bi-people"></i> Lista de Alunos</h5>
                         </div>
                         <div class="card-body">
                             <div class="table-responsive">
@@ -335,7 +335,7 @@
                     <strong>Atenção!</strong> Esta ação não pode ser desfeita. Todos os registros e fotos no período selecionado serão apagados permanentemente.
                 </div>
                 <p>Período: <strong id="deletePeriodo"></strong></p>
-                <p>Funcionário: <strong id="deleteFuncionario"></strong></p>
+                <p>Aluno: <strong id="deleteFuncionario"></strong></p>
                 <div id="deletePreview" class="alert alert-info d-none">
                     Serão apagados <strong id="deleteCount">0</strong> registros.
                 </div>
@@ -372,16 +372,16 @@ document.addEventListener('DOMContentLoaded', () => {
     carregarLocais();
 });
 
-// Carregar funcionários
+// Carregar alunos
 async function carregarFuncionarios() {
     try {
         const response = await fetchWithAuth('/admin/users');
         if (!response) return;
         const users = await response.json();
 
-        // Preenche select de funcionários
+        // Preenche select de alunos
         const select = document.getElementById('relFuncionario');
-        select.innerHTML = '<option value="">Todos os funcionários</option>';
+        select.innerHTML = '<option value="">Todos os alunos</option>';
         users.forEach(u => {
             select.innerHTML += `<option value="${u.id}">${u.nome}</option>`;
         });
@@ -393,7 +393,7 @@ async function carregarFuncionarios() {
                 <td>${u.nome}</td>
                 <td>${u.email}</td>
                 <td>${u.matricula}</td>
-                <td>${u.is_admin ? '<span class="badge bg-primary">Admin</span>' : '<span class="badge bg-secondary">Funcionário</span>'}</td>
+                <td>${u.is_admin ? '<span class="badge bg-primary">Admin</span>' : '<span class="badge bg-secondary">Aluno</span>'}</td>
                 <td>${u.ativo ? '<span class="badge bg-success">Ativo</span>' : '<span class="badge bg-danger">Inativo</span>'}</td>
                 <td>
                     <button class="btn btn-sm btn-outline-${u.ativo ? 'warning' : 'success'}" onclick="toggleAtivo(${u.id})">
@@ -406,11 +406,11 @@ async function carregarFuncionarios() {
             </tr>
         `).join('');
     } catch (error) {
-        console.error('Erro ao carregar funcionários:', error);
+        console.error('Erro ao carregar alunos:', error);
     }
 }
 
-// Cadastrar funcionário
+// Cadastrar aluno
 async function cadastrarFuncionario(event) {
     event.preventDefault();
     const alertEl = document.getElementById('alertCadastro');
@@ -433,7 +433,7 @@ async function cadastrarFuncionario(event) {
         if (!response) return;
         if (response.ok) {
             alertEl.className = 'alert alert-success mt-3';
-            alertEl.textContent = 'Funcionário cadastrado com sucesso!';
+            alertEl.textContent = 'Aluno cadastrado com sucesso!';
             alertEl.classList.remove('d-none');
             document.getElementById('formNovoFuncionario').reset();
             carregarFuncionarios();
@@ -669,7 +669,7 @@ function abrirModalDeletar() {
     const funcionarioId = funcionarioSelect.value;
     const funcionarioNome = funcionarioId ?
         funcionarioSelect.options[funcionarioSelect.selectedIndex].text :
-        'Todos os funcionários';
+        'Todos os alunos';
 
     document.getElementById('deletePeriodo').textContent =
         `${new Date(dataInicio + 'T00:00:00').toLocaleDateString('pt-BR')} a ${new Date(dataFim + 'T00:00:00').toLocaleDateString('pt-BR')}`;

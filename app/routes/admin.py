@@ -295,7 +295,7 @@ async def export_relatorio(
     output = io.StringIO()
     writer = csv.writer(output)
     writer.writerow([
-        'Data', 'Hora', 'Funcionário', 'Matrícula', 'Tipo',
+        'Data', 'Hora', 'Aluno', 'Matrícula', 'Tipo',
         'Latitude', 'Longitude', 'Dentro do Raio'
     ])
 
@@ -439,7 +439,7 @@ async def export_relatorio_pdf(
     elements.append(Spacer(1, 0.5*cm))
 
     # Tabela de dados
-    data = [['Data', 'Hora', 'Funcionário', 'Matrícula', 'Tipo', 'Localização', 'Raio', 'Rosto']]
+    data = [['Data', 'Hora', 'Aluno', 'Matrícula', 'Tipo', 'Localização', 'Raio', 'Rosto']]
 
     for record, user in results:
         face_status = ''

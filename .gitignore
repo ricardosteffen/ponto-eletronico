@@ -13,3 +13,4 @@ uploads/fotos/*
 .vscode/
 *.log
 .DS_Store
+ngrok
