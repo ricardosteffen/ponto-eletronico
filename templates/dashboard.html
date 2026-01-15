@@ -1,0 +1,408 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - Registro de Presença{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="row">
+        <!-- Card Principal - Bater Ponto -->
+        <div class="col-lg-6 mb-4">
+            <div class="card shadow h-100">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="mb-0"><i class="bi bi-clock"></i> Registro de Presença</h5>
+                </div>
+                <div class="card-body text-center">
+                    <div id="currentTime" class="display-4 mb-3">--:--:--</div>
+                    <div id="currentDate" class="text-muted mb-4"></div>
+
+                    <div id="locationStatus" class="mb-3">
+                        <span class="badge bg-secondary">
+                            <i class="bi bi-geo-alt"></i> Aguardando localização...
+                        </span>
+                    </div>
+
+                    <div id="pontoStatus" class="mb-4">
+                        <span class="badge bg-info fs-6" id="proximoTipo">Carregando...</span>
+                    </div>
+
+                    <!-- Opção de Foto -->
+                    <div class="mb-3">
+                        <div class="form-check form-switch d-flex justify-content-center">
+                            <input class="form-check-input me-2" type="checkbox" id="usarFoto">
+                            <label class="form-check-label" for="usarFoto">Capturar foto</label>
+                        </div>
+                    </div>
+
+                    <!-- Preview da Câmera (oculto por padrão) -->
+                    <div id="cameraContainer" class="mb-3 d-none">
+                        <video id="cameraPreview" class="rounded" autoplay playsinline style="max-width: 100%; max-height: 200px;"></video>
+                        <canvas id="cameraCanvas" class="d-none"></canvas>
+                    </div>
+
+                    <button id="btnBaterPonto" class="btn btn-lg btn-secondary px-5 py-3" onclick="baterPonto()" disabled>
+                        <i class="bi bi-geo-alt"></i>
+                        <span id="btnPontoText">Aguardando GPS...</span>
+                    </button>
+
+                    <div id="alertPonto" class="alert mt-3 d-none"></div>
+                    <div id="alertGPS" class="alert alert-warning mt-3">
+                        <i class="bi bi-exclamation-triangle"></i>
+                        <strong>GPS obrigatório!</strong> Permita o acesso à localização para registrar presença.
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Card de Resumo do Dia -->
+        <div class="col-lg-6 mb-4">
+            <div class="card shadow h-100">
+                <div class="card-header bg-info text-white">
+                    <h5 class="mb-0"><i class="bi bi-calendar-day"></i> Hoje</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row text-center mb-4">
+                        <div class="col-6">
+                            <div class="border rounded p-3">
+                                <h6 class="text-muted">Horas Trabalhadas</h6>
+                                <span class="display-6" id="horasHoje">00:00</span>
+                            </div>
+                        </div>
+                        <div class="col-6">
+                            <div class="border rounded p-3">
+                                <h6 class="text-muted">Registros</h6>
+                                <span class="display-6" id="registrosHoje">0</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <h6 class="mb-3">Registros de Hoje:</h6>
+                    <div id="listaRegistrosHoje" class="list-group">
+                        <div class="text-center text-muted py-3">Nenhum registro hoje</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Histórico -->
+    <div class="row">
+        <div class="col-12">
+            <div class="card shadow">
+                <div class="card-header bg-secondary text-white d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0"><i class="bi bi-list-check"></i> Histórico</h5>
+                    <div class="d-flex gap-2">
+                        <input type="date" id="dataInicio" class="form-control form-control-sm" style="width: auto;">
+                        <input type="date" id="dataFim" class="form-control form-control-sm" style="width: auto;">
+                        <button class="btn btn-light btn-sm" onclick="carregarHistorico()">
+                            <i class="bi bi-search"></i> Filtrar
+                        </button>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-hover">
+                            <thead>
+                                <tr>
+                                    <th>Data</th>
+                                    <th>Hora</th>
+                                    <th>Tipo</th>
+                                    <th>Localização</th>
+                                    <th>Status</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tabelaHistorico">
+                                <tr>
+                                    <td colspan="5" class="text-center text-muted">Carregando...</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <div class="d-flex justify-content-between align-items-center mt-3">
+                        <span class="text-muted" id="resumoHistorico"></span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Verifica autenticação
+if (!localStorage.getItem('token')) {
+    window.location.href = '/login';
+}
+
+let currentLocation = null;
+let stream = null;
+
+// Atualiza relógio
+function updateClock() {
+    const now = new Date();
+    document.getElementById('currentTime').textContent = now.toLocaleTimeString('pt-BR');
+    document.getElementById('currentDate').textContent = now.toLocaleDateString('pt-BR', {
+        weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
+    });
+}
+setInterval(updateClock, 1000);
+updateClock();
+
+// Configura datas padrão
+document.addEventListener('DOMContentLoaded', () => {
+    const hoje = new Date();
+    const primeiroDia = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
+
+    document.getElementById('dataInicio').value = primeiroDia.toISOString().split('T')[0];
+    document.getElementById('dataFim').value = hoje.toISOString().split('T')[0];
+
+    getLocation();
+    carregarStatus();
+    carregarHistorico();
+
+    // Toggle câmera
+    document.getElementById('usarFoto').addEventListener('change', toggleCamera);
+});
+
+// Geolocalização
+function getLocation() {
+    const statusEl = document.getElementById('locationStatus');
+    const btn = document.getElementById('btnBaterPonto');
+    const btnText = document.getElementById('btnPontoText');
+    const alertGPS = document.getElementById('alertGPS');
+
+    if (!navigator.geolocation) {
+        statusEl.innerHTML = '<span class="badge bg-danger"><i class="bi bi-geo-alt-fill"></i> Geolocalização não suportada</span>';
+        alertGPS.innerHTML = '<i class="bi bi-x-circle"></i> <strong>Erro!</strong> Seu navegador não suporta geolocalização.';
+        alertGPS.className = 'alert alert-danger mt-3';
+        return;
+    }
+
+    statusEl.innerHTML = '<span class="badge bg-info"><i class="bi bi-geo-alt-fill"></i> Obtendo localização...</span>';
+
+    // Atualiza localização continuamente
+    navigator.geolocation.watchPosition(
+        (position) => {
+            currentLocation = {
+                latitude: position.coords.latitude,
+                longitude: position.coords.longitude
+            };
+            statusEl.innerHTML = `<span class="badge bg-success"><i class="bi bi-geo-alt-fill"></i> GPS ativo</span>`;
+
+            // Habilita o botão de bater ponto
+            btn.disabled = false;
+            btn.className = 'btn btn-lg btn-success px-5 py-3';
+            btn.innerHTML = '<i class="bi bi-check-circle"></i> <span id="btnPontoText">Registrar Presença</span>';
+            alertGPS.classList.add('d-none');
+        },
+        (error) => {
+            currentLocation = null;
+            statusEl.innerHTML = '<span class="badge bg-danger"><i class="bi bi-geo-alt-fill"></i> GPS negado</span>';
+
+            // Desabilita o botão
+            btn.disabled = true;
+            btn.className = 'btn btn-lg btn-secondary px-5 py-3';
+            btn.innerHTML = '<i class="bi bi-geo-alt"></i> <span id="btnPontoText">GPS Necessário</span>';
+            alertGPS.classList.remove('d-none');
+            alertGPS.innerHTML = '<i class="bi bi-exclamation-triangle"></i> <strong>GPS obrigatório!</strong> Permita o acesso à localização para registrar presença.';
+
+            console.error('Erro de geolocalização:', error);
+        },
+        { enableHighAccuracy: true, timeout: 15000, maximumAge: 30000 }
+    );
+}
+
+// Toggle câmera
+async function toggleCamera() {
+    const usarFoto = document.getElementById('usarFoto').checked;
+    const container = document.getElementById('cameraContainer');
+    const video = document.getElementById('cameraPreview');
+
+    if (usarFoto) {
+        try {
+            stream = await navigator.mediaDevices.getUserMedia({
+                video: { facingMode: 'user' }
+            });
+            video.srcObject = stream;
+            container.classList.remove('d-none');
+        } catch (err) {
+            alert('Não foi possível acessar a câmera');
+            document.getElementById('usarFoto').checked = false;
+        }
+    } else {
+        if (stream) {
+            stream.getTracks().forEach(track => track.stop());
+            stream = null;
+        }
+        container.classList.add('d-none');
+    }
+}
+
+// Captura foto
+function capturePhoto() {
+    const video = document.getElementById('cameraPreview');
+    const canvas = document.getElementById('cameraCanvas');
+    const ctx = canvas.getContext('2d');
+
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    ctx.drawImage(video, 0, 0);
+
+    return new Promise((resolve) => {
+        canvas.toBlob(resolve, 'image/jpeg', 0.8);
+    });
+}
+
+// Carregar status do ponto
+async function carregarStatus() {
+    try {
+        const response = await fetchWithAuth('/ponto/status');
+        if (!response) return;
+
+        const data = await response.json();
+
+        if (response.ok) {
+            const proximoTipo = data.pode_bater;
+            document.getElementById('proximoTipo').textContent =
+                proximoTipo === 'entrada' ? 'Próximo: ENTRADA' : 'Próximo: SAÍDA';
+            document.getElementById('proximoTipo').className =
+                proximoTipo === 'entrada' ? 'badge bg-success fs-6' : 'badge bg-danger fs-6';
+
+            document.getElementById('horasHoje').textContent = data.horas_hoje;
+            document.getElementById('registrosHoje').textContent = data.registros_hoje.length;
+
+            // Lista de registros de hoje
+            const lista = document.getElementById('listaRegistrosHoje');
+            if (data.registros_hoje.length > 0) {
+                lista.innerHTML = data.registros_hoje.map(r => `
+                    <div class="list-group-item d-flex justify-content-between align-items-center">
+                        <span>
+                            <span class="badge ${r.tipo === 'entrada' ? 'bg-success' : 'bg-danger'}">${r.tipo.toUpperCase()}</span>
+                        </span>
+                        <span>${new Date(r.timestamp).toLocaleTimeString('pt-BR')}</span>
+                        <span>
+                            ${r.dentro_raio ?
+                                '<i class="bi bi-geo-alt-fill text-success" title="Dentro do raio"></i>' :
+                                '<i class="bi bi-geo-alt text-warning" title="Fora do raio"></i>'}
+                            ${r.face_detected === true ?
+                                '<i class="bi bi-person-check text-success ms-1" title="Rosto detectado"></i>' :
+                                r.face_detected === false ?
+                                '<i class="bi bi-person-x text-warning ms-1" title="Rosto não detectado"></i>' : ''}
+                        </span>
+                    </div>
+                `).join('');
+            } else {
+                lista.innerHTML = '<div class="text-center text-muted py-3">Nenhum registro hoje</div>';
+            }
+        }
+    } catch (error) {
+        console.error('Erro ao carregar status:', error);
+    }
+}
+
+// Bater ponto
+async function baterPonto() {
+    const btn = document.getElementById('btnBaterPonto');
+    const btnText = document.getElementById('btnPontoText');
+    const alertEl = document.getElementById('alertPonto');
+
+    btn.disabled = true;
+    btnText.textContent = 'Registrando...';
+
+    try {
+        const formData = new FormData();
+
+        if (currentLocation) {
+            formData.append('latitude', currentLocation.latitude);
+            formData.append('longitude', currentLocation.longitude);
+        }
+
+        // Captura foto se habilitado
+        if (document.getElementById('usarFoto').checked && stream) {
+            const blob = await capturePhoto();
+            formData.append('foto', blob, 'foto.jpg');
+        }
+
+        const response = await fetchWithAuth('/ponto/registrar', {
+            method: 'POST',
+            body: formData
+        });
+
+        if (!response) return;
+        const data = await response.json();
+
+        if (response.ok) {
+            alertEl.className = 'alert alert-success mt-3';
+            alertEl.innerHTML = `
+                <strong>${data.tipo.toUpperCase()}</strong> registrada com sucesso às
+                ${new Date(data.timestamp).toLocaleTimeString('pt-BR')}
+                ${!data.dentro_raio ? '<br><small class="text-warning"><i class="bi bi-exclamation-triangle"></i> Fora do raio permitido</small>' : ''}
+            `;
+            alertEl.classList.remove('d-none');
+
+            // Atualiza status
+            carregarStatus();
+            carregarHistorico();
+        } else {
+            alertEl.className = 'alert alert-danger mt-3';
+            alertEl.textContent = data.detail || 'Erro ao registrar ponto';
+            alertEl.classList.remove('d-none');
+        }
+    } catch (error) {
+        alertEl.className = 'alert alert-danger mt-3';
+        alertEl.textContent = 'Erro de conexão. Tente novamente.';
+        alertEl.classList.remove('d-none');
+    } finally {
+        btn.disabled = false;
+        btnText.textContent = 'Registrar Presença';
+    }
+}
+
+// Carregar histórico
+async function carregarHistorico() {
+    const dataInicio = document.getElementById('dataInicio').value;
+    const dataFim = document.getElementById('dataFim').value;
+
+    try {
+        const response = await fetchWithAuth(`/ponto/historico?data_inicio=${dataInicio}&data_fim=${dataFim}`);
+        if (!response) return;
+        const data = await response.json();
+
+        if (response.ok) {
+            const tbody = document.getElementById('tabelaHistorico');
+
+            if (data.registros.length > 0) {
+                tbody.innerHTML = data.registros.map(r => `
+                    <tr>
+                        <td>${new Date(r.timestamp).toLocaleDateString('pt-BR')}</td>
+                        <td>${new Date(r.timestamp).toLocaleTimeString('pt-BR')}</td>
+                        <td>
+                            <span class="badge ${r.tipo === 'entrada' ? 'bg-success' : 'bg-danger'}">
+                                ${r.tipo.toUpperCase()}
+                            </span>
+                        </td>
+                        <td>
+                            ${r.latitude && r.longitude ?
+                                `<small>${r.latitude.toFixed(4)}, ${r.longitude.toFixed(4)}</small>` :
+                                '<small class="text-muted">N/D</small>'}
+                        </td>
+                        <td>
+                            ${r.dentro_raio ?
+                                '<span class="badge bg-success">OK</span>' :
+                                '<span class="badge bg-warning text-dark">Fora do raio</span>'}
+                        </td>
+                    </tr>
+                `).join('');
+            } else {
+                tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted">Nenhum registro encontrado</td></tr>';
+            }
+
+            document.getElementById('resumoHistorico').textContent =
+                `Total: ${data.total_horas_periodo} horas em ${data.dias_trabalhados} dias`;
+        }
+    } catch (error) {
+        console.error('Erro ao carregar histórico:', error);
+    }
+}
+</script>
+{% endblock %}

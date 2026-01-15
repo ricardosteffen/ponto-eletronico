@@ -1,0 +1,135 @@
+{% extends "base.html" %}
+
+{% block title %}Cadastro - Registro de Presença PUC-Rio{% endblock %}
+
+{% block content %}
+<div class="login-container">
+    <div class="container">
+        <div class="row justify-content-center align-items-center min-vh-100">
+            <div class="col-md-5 col-lg-4">
+                <div class="card shadow-lg">
+                    <div class="card-body p-5">
+                        <div class="text-center mb-4">
+                            <div class="logo-container">
+                                <img src="/static/img/logo.png" alt="PUC-Rio" style="width: 260px; max-width: 100%; height: auto;" onerror="this.style.display='none'">
+                            </div>
+                            <h2 class="mt-3" style="color: var(--puc-green-dark);">Criar Conta</h2>
+                            <p class="text-muted">Preencha seus dados para se cadastrar</p>
+                        </div>
+
+                        <div id="alertBox" class="alert d-none" role="alert"></div>
+
+                        <form id="cadastroForm" onsubmit="handleCadastro(event)">
+                            <div class="mb-3">
+                                <label for="nome" class="form-label">Nome Completo</label>
+                                <div class="input-group">
+                                    <span class="input-group-text"><i class="bi bi-person"></i></span>
+                                    <input type="text" class="form-control" id="nome" name="nome" required
+                                           placeholder="Seu nome completo">
+                                </div>
+                            </div>
+                            <div class="mb-3">
+                                <label for="email" class="form-label">Email</label>
+                                <div class="input-group">
+                                    <span class="input-group-text"><i class="bi bi-envelope"></i></span>
+                                    <input type="email" class="form-control" id="email" name="email" required
+                                           placeholder="seu@email.com">
+                                </div>
+                            </div>
+                            <div class="mb-3">
+                                <label for="matricula" class="form-label">Matrícula</label>
+                                <div class="input-group">
+                                    <span class="input-group-text"><i class="bi bi-card-text"></i></span>
+                                    <input type="text" class="form-control" id="matricula" name="matricula" required
+                                           placeholder="Sua matrícula">
+                                </div>
+                            </div>
+                            <div class="mb-4">
+                                <label for="senha" class="form-label">Senha</label>
+                                <div class="input-group">
+                                    <span class="input-group-text"><i class="bi bi-lock"></i></span>
+                                    <input type="password" class="form-control" id="senha" name="senha" required
+                                           placeholder="Crie uma senha" minlength="4">
+                                </div>
+                            </div>
+                            <button type="submit" class="btn btn-primary w-100 py-2" id="btnCadastro">
+                                <span class="spinner-border spinner-border-sm d-none" id="cadastroSpinner"></span>
+                                <span id="btnCadastroText">Cadastrar</span>
+                            </button>
+                        </form>
+                        <hr class="my-4">
+                        <p class="text-center mb-0">
+                            Já tem conta? <a href="/login" class="text-decoration-none" style="color: var(--puc-green);">Faça login</a>
+                        </p>
+                    </div>
+                </div>
+                <p class="text-center mt-3 text-white-50">
+                    <small>Desenvolvido por Ricardo Steffen &copy; 2026</small>
+                </p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Se já está logado, redireciona para dashboard
+if (localStorage.getItem('token')) {
+    window.location.href = '/dashboard';
+}
+
+async function handleCadastro(event) {
+    event.preventDefault();
+
+    const spinner = document.getElementById('cadastroSpinner');
+    const btnText = document.getElementById('btnCadastroText');
+    const alertBox = document.getElementById('alertBox');
+
+    spinner.classList.remove('d-none');
+    btnText.textContent = 'Cadastrando...';
+    alertBox.classList.add('d-none');
+
+    const dados = {
+        nome: document.getElementById('nome').value,
+        email: document.getElementById('email').value,
+        matricula: document.getElementById('matricula').value,
+        senha: document.getElementById('senha').value
+    };
+
+    try {
+        const response = await fetch('/auth/signup', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(dados)
+        });
+
+        const data = await response.json();
+
+        if (response.ok) {
+            alertBox.className = 'alert alert-success';
+            alertBox.textContent = 'Cadastro realizado com sucesso! Redirecionando...';
+            alertBox.classList.remove('d-none');
+
+            // Redireciona para login após 2 segundos
+            setTimeout(() => {
+                window.location.href = '/login';
+            }, 2000);
+        } else {
+            alertBox.className = 'alert alert-danger';
+            alertBox.textContent = data.detail || 'Erro ao fazer cadastro';
+            alertBox.classList.remove('d-none');
+        }
+    } catch (error) {
+        alertBox.className = 'alert alert-danger';
+        alertBox.textContent = 'Erro de conexão. Tente novamente.';
+        alertBox.classList.remove('d-none');
+    } finally {
+        spinner.classList.add('d-none');
+        btnText.textContent = 'Cadastrar';
+    }
+}
+</script>
+{% endblock %}

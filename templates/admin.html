@@ -1,0 +1,849 @@
+{% extends "base.html" %}
+
+{% block title %}Administração - Ponto Eletrônico{% endblock %}
+
+{% block content %}
+<div class="container">
+    <h2 class="mb-4"><i class="bi bi-gear"></i> Painel Administrativo</h2>
+
+    <!-- Nav Tabs -->
+    <ul class="nav nav-tabs mb-4" id="adminTabs" role="tablist">
+        <li class="nav-item">
+            <button class="nav-link active" id="relatorios-tab" data-bs-toggle="tab" data-bs-target="#relatorios" type="button">
+                <i class="bi bi-graph-up"></i> Relatórios
+            </button>
+        </li>
+        <li class="nav-item">
+            <button class="nav-link" id="funcionarios-tab" data-bs-toggle="tab" data-bs-target="#funcionarios" type="button">
+                <i class="bi bi-people"></i> Funcionários
+            </button>
+        </li>
+        <li class="nav-item">
+            <button class="nav-link" id="locais-tab" data-bs-toggle="tab" data-bs-target="#locais" type="button">
+                <i class="bi bi-geo-alt"></i> Locais
+            </button>
+        </li>
+        <li class="nav-item">
+            <button class="nav-link" id="configuracoes-tab" data-bs-toggle="tab" data-bs-target="#configuracoes" type="button">
+                <i class="bi bi-sliders"></i> Configurações
+            </button>
+        </li>
+    </ul>
+
+    <!-- Tab Content -->
+    <div class="tab-content" id="adminTabContent">
+        <!-- Tab Relatórios -->
+        <div class="tab-pane fade show active" id="relatorios" role="tabpanel">
+            <div class="card shadow">
+                <div class="card-header">
+                    <div class="row align-items-center">
+                        <div class="col-md-8">
+                            <div class="d-flex gap-2 flex-wrap">
+                                <input type="date" id="relDataInicio" class="form-control" style="width: auto;">
+                                <input type="date" id="relDataFim" class="form-control" style="width: auto;">
+                                <select id="relFuncionario" class="form-select" style="width: auto;">
+                                    <option value="">Todos os funcionários</option>
+                                </select>
+                                <button class="btn btn-primary" onclick="carregarRelatorio()">
+                                    <i class="bi bi-search"></i> Filtrar
+                                </button>
+                            </div>
+                        </div>
+                        <div class="col-md-4 text-end">
+                            <div class="btn-group">
+                                <button class="btn btn-success" onclick="exportarRelatorio()">
+                                    <i class="bi bi-file-earmark-spreadsheet"></i> CSV
+                                </button>
+                                <button class="btn btn-danger" onclick="exportarRelatorioPDF()">
+                                    <i class="bi bi-file-earmark-pdf"></i> PDF
+                                </button>
+                            </div>
+                            <button class="btn btn-outline-danger ms-2" onclick="abrirModalDeletar()">
+                                <i class="bi bi-trash"></i> Apagar
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <!-- Resumo -->
+                    <div class="row mb-4" id="resumoCards">
+                        <div class="col-md-3">
+                            <div class="card bg-primary text-white">
+                                <div class="card-body text-center">
+                                    <h6>Total de Registros</h6>
+                                    <span class="display-6" id="totalRegistros">0</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="card bg-success text-white">
+                                <div class="card-body text-center">
+                                    <h6>Funcionários</h6>
+                                    <span class="display-6" id="totalFuncionarios">0</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="card bg-info text-white">
+                                <div class="card-body text-center">
+                                    <h6>Total Horas</h6>
+                                    <span class="display-6" id="totalHoras">0h</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="card bg-warning text-dark">
+                                <div class="card-body text-center">
+                                    <h6>Fora do Raio</h6>
+                                    <span class="display-6" id="foraRaio">0</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Tabela de Resumo por Funcionário -->
+                    <h5 class="mb-3">Resumo por Funcionário</h5>
+                    <div class="table-responsive mb-4">
+                        <table class="table table-hover">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Funcionário</th>
+                                    <th>Matrícula</th>
+                                    <th>Horas Trabalhadas</th>
+                                    <th>Dias</th>
+                                    <th>Alertas</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tabelaResumo">
+                                <tr><td colspan="5" class="text-center">Carregando...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <!-- Tabela de Registros Detalhados -->
+                    <h5 class="mb-3">Registros Detalhados</h5>
+                    <div class="table-responsive">
+                        <table class="table table-sm table-hover">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Data</th>
+                                    <th>Hora</th>
+                                    <th>Funcionário</th>
+                                    <th>Matrícula</th>
+                                    <th>Tipo</th>
+                                    <th>Localização</th>
+                                    <th>Raio</th>
+                                    <th>Rosto</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tabelaRelatorio">
+                                <tr><td colspan="8" class="text-center">Carregando...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tab Funcionários -->
+        <div class="tab-pane fade" id="funcionarios" role="tabpanel">
+            <div class="row">
+                <div class="col-lg-4 mb-4">
+                    <div class="card shadow">
+                        <div class="card-header bg-primary text-white">
+                            <h5 class="mb-0"><i class="bi bi-person-plus"></i> Novo Funcionário</h5>
+                        </div>
+                        <div class="card-body">
+                            <form id="formNovoFuncionario" onsubmit="cadastrarFuncionario(event)">
+                                <div class="mb-3">
+                                    <label class="form-label">Nome</label>
+                                    <input type="text" class="form-control" id="novoNome" required>
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label">Email</label>
+                                    <input type="email" class="form-control" id="novoEmail" required>
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label">Matrícula</label>
+                                    <input type="text" class="form-control" id="novoMatricula" required>
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label">Senha</label>
+                                    <input type="password" class="form-control" id="novoSenha" required>
+                                </div>
+                                <div class="mb-3 form-check">
+                                    <input type="checkbox" class="form-check-input" id="novoAdmin">
+                                    <label class="form-check-label" for="novoAdmin">Administrador</label>
+                                </div>
+                                <button type="submit" class="btn btn-primary w-100">
+                                    <i class="bi bi-plus-circle"></i> Cadastrar
+                                </button>
+                            </form>
+                            <div id="alertCadastro" class="alert mt-3 d-none"></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-lg-8">
+                    <div class="card shadow">
+                        <div class="card-header">
+                            <h5 class="mb-0"><i class="bi bi-people"></i> Lista de Funcionários</h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="table-responsive">
+                                <table class="table table-hover">
+                                    <thead>
+                                        <tr>
+                                            <th>Nome</th>
+                                            <th>Email</th>
+                                            <th>Matrícula</th>
+                                            <th>Tipo</th>
+                                            <th>Status</th>
+                                            <th>Ações</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="tabelaFuncionarios">
+                                        <tr><td colspan="6" class="text-center">Carregando...</td></tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tab Locais -->
+        <div class="tab-pane fade" id="locais" role="tabpanel">
+            <div class="row">
+                <div class="col-lg-4 mb-4">
+                    <div class="card shadow">
+                        <div class="card-header bg-primary text-white">
+                            <h5 class="mb-0"><i class="bi bi-geo-alt-fill"></i> Novo Local</h5>
+                        </div>
+                        <div class="card-body">
+                            <form id="formNovoLocal" onsubmit="cadastrarLocal(event)">
+                                <div class="mb-3">
+                                    <label class="form-label">Nome do Local</label>
+                                    <input type="text" class="form-control" id="localNome" required placeholder="Ex: Campus PUC, Hospital, etc.">
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label">Latitude</label>
+                                    <input type="number" step="any" class="form-control" id="localLatitude" required>
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label">Longitude</label>
+                                    <input type="number" step="any" class="form-control" id="localLongitude" required>
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label">Raio (metros)</label>
+                                    <input type="number" class="form-control" id="localRaio" value="100" required min="10" max="5000">
+                                </div>
+                                <button type="button" class="btn btn-outline-secondary mb-3 w-100" onclick="obterLocalizacaoLocal()">
+                                    <i class="bi bi-geo-alt"></i> Usar minha localização
+                                </button>
+                                <button type="submit" class="btn btn-primary w-100">
+                                    <i class="bi bi-plus-circle"></i> Adicionar Local
+                                </button>
+                            </form>
+                            <div id="alertLocal" class="alert mt-3 d-none"></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-lg-8">
+                    <div class="card shadow">
+                        <div class="card-header">
+                            <h5 class="mb-0"><i class="bi bi-geo"></i> Locais Cadastrados</h5>
+                        </div>
+                        <div class="card-body">
+                            <p class="text-muted mb-3">
+                                <i class="bi bi-info-circle"></i> O aluno pode registrar presença se estiver dentro do raio de qualquer um dos locais abaixo.
+                            </p>
+                            <div class="table-responsive">
+                                <table class="table table-hover">
+                                    <thead>
+                                        <tr>
+                                            <th>Nome</th>
+                                            <th>Coordenadas</th>
+                                            <th>Raio</th>
+                                            <th>Status</th>
+                                            <th>Ações</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="tabelaLocais">
+                                        <tr><td colspan="5" class="text-center">Carregando...</td></tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tab Configurações -->
+        <div class="tab-pane fade" id="configuracoes" role="tabpanel">
+            <div class="row justify-content-center">
+                <div class="col-lg-6">
+                    <div class="card shadow">
+                        <div class="card-header bg-secondary text-white">
+                            <h5 class="mb-0"><i class="bi bi-building"></i> Configurações da Empresa</h5>
+                        </div>
+                        <div class="card-body">
+                            <form id="formConfiguracoes" onsubmit="salvarConfiguracoes(event)">
+                                <div class="mb-3">
+                                    <label class="form-label">Nome da Empresa</label>
+                                    <input type="text" class="form-control" id="cfgNomeEmpresa">
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label">Latitude</label>
+                                    <input type="number" step="any" class="form-control" id="cfgLatitude" required>
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label">Longitude</label>
+                                    <input type="number" step="any" class="form-control" id="cfgLongitude" required>
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label">Raio Permitido (metros)</label>
+                                    <input type="number" class="form-control" id="cfgRaio" required min="10" max="5000">
+                                </div>
+                                <button type="button" class="btn btn-outline-secondary mb-3" onclick="obterLocalizacaoAtual()">
+                                    <i class="bi bi-geo-alt"></i> Usar minha localização atual
+                                </button>
+                                <button type="submit" class="btn btn-primary w-100">
+                                    <i class="bi bi-check-circle"></i> Salvar Configurações
+                                </button>
+                            </form>
+                            <div id="alertConfig" class="alert mt-3 d-none"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Deletar Registros -->
+<div class="modal fade" id="modalDeletar" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-danger text-white">
+                <h5 class="modal-title"><i class="bi bi-exclamation-triangle"></i> Apagar Registros</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="alert alert-warning">
+                    <strong>Atenção!</strong> Esta ação não pode ser desfeita. Todos os registros e fotos no período selecionado serão apagados permanentemente.
+                </div>
+                <p>Período: <strong id="deletePeriodo"></strong></p>
+                <p>Funcionário: <strong id="deleteFuncionario"></strong></p>
+                <div id="deletePreview" class="alert alert-info d-none">
+                    Serão apagados <strong id="deleteCount">0</strong> registros.
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-danger" onclick="confirmarDeletar()">
+                    <i class="bi bi-trash"></i> Confirmar Exclusão
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Verifica autenticação e permissão admin
+const currentUser = JSON.parse(localStorage.getItem('user') || 'null');
+if (!localStorage.getItem('token') || !currentUser || !currentUser.is_admin) {
+    window.location.href = '/login';
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    const hoje = new Date();
+    const primeiroDia = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
+
+    document.getElementById('relDataInicio').value = primeiroDia.toISOString().split('T')[0];
+    document.getElementById('relDataFim').value = hoje.toISOString().split('T')[0];
+
+    carregarFuncionarios();
+    carregarConfiguracoes();
+    carregarRelatorio();
+    carregarLocais();
+});
+
+// Carregar funcionários
+async function carregarFuncionarios() {
+    try {
+        const response = await fetchWithAuth('/admin/users');
+        if (!response) return;
+        const users = await response.json();
+
+        // Preenche select de funcionários
+        const select = document.getElementById('relFuncionario');
+        select.innerHTML = '<option value="">Todos os funcionários</option>';
+        users.forEach(u => {
+            select.innerHTML += `<option value="${u.id}">${u.nome}</option>`;
+        });
+
+        // Preenche tabela (não pode apagar a si mesmo)
+        const tbody = document.getElementById('tabelaFuncionarios');
+        tbody.innerHTML = users.map(u => `
+            <tr>
+                <td>${u.nome}</td>
+                <td>${u.email}</td>
+                <td>${u.matricula}</td>
+                <td>${u.is_admin ? '<span class="badge bg-primary">Admin</span>' : '<span class="badge bg-secondary">Funcionário</span>'}</td>
+                <td>${u.ativo ? '<span class="badge bg-success">Ativo</span>' : '<span class="badge bg-danger">Inativo</span>'}</td>
+                <td>
+                    <button class="btn btn-sm btn-outline-${u.ativo ? 'warning' : 'success'}" onclick="toggleAtivo(${u.id})">
+                        ${u.ativo ? 'Desativar' : 'Ativar'}
+                    </button>
+                    <button class="btn btn-sm btn-outline-danger" onclick="deletarUsuario(${u.id})" ${u.id === currentUser.id ? 'disabled title="Não pode apagar sua própria conta"' : ''}>
+                        <i class="bi bi-trash"></i>
+                    </button>
+                </td>
+            </tr>
+        `).join('');
+    } catch (error) {
+        console.error('Erro ao carregar funcionários:', error);
+    }
+}
+
+// Cadastrar funcionário
+async function cadastrarFuncionario(event) {
+    event.preventDefault();
+    const alertEl = document.getElementById('alertCadastro');
+
+    const dados = {
+        nome: document.getElementById('novoNome').value,
+        email: document.getElementById('novoEmail').value,
+        matricula: document.getElementById('novoMatricula').value,
+        senha: document.getElementById('novoSenha').value,
+        is_admin: document.getElementById('novoAdmin').checked
+    };
+
+    try {
+        const response = await fetchWithAuth('/auth/register', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(dados)
+        });
+
+        if (!response) return;
+        if (response.ok) {
+            alertEl.className = 'alert alert-success mt-3';
+            alertEl.textContent = 'Funcionário cadastrado com sucesso!';
+            alertEl.classList.remove('d-none');
+            document.getElementById('formNovoFuncionario').reset();
+            carregarFuncionarios();
+        } else {
+            const data = await response.json();
+            alertEl.className = 'alert alert-danger mt-3';
+            alertEl.textContent = data.detail || 'Erro ao cadastrar';
+            alertEl.classList.remove('d-none');
+        }
+    } catch (error) {
+        alertEl.className = 'alert alert-danger mt-3';
+        alertEl.textContent = 'Erro de conexão';
+        alertEl.classList.remove('d-none');
+    }
+}
+
+// Toggle ativo/inativo
+async function toggleAtivo(userId) {
+    try {
+        const response = await fetchWithAuth(`/auth/users/${userId}/toggle-active`, {
+            method: 'PUT'
+        });
+
+        if (!response) return;
+        if (response.ok) {
+            carregarFuncionarios();
+        } else {
+            const data = await response.json();
+            alert(data.detail || 'Erro ao alterar status');
+        }
+    } catch (error) {
+        alert('Erro de conexão');
+    }
+}
+
+// Deletar usuário
+async function deletarUsuario(userId) {
+    if (!confirm('Tem certeza que deseja APAGAR este usuário?\n\nTodos os registros de ponto também serão apagados.\n\nEsta ação não pode ser desfeita!')) {
+        return;
+    }
+
+    try {
+        const response = await fetchWithAuth(`/auth/users/${userId}`, {
+            method: 'DELETE'
+        });
+
+        if (!response) return;
+
+        const data = await response.json();
+
+        if (response.ok) {
+            alert(data.message || 'Usuário apagado com sucesso');
+            carregarFuncionarios();
+            carregarRelatorio();
+        } else {
+            alert(data.detail || 'Erro ao apagar usuário');
+        }
+    } catch (error) {
+        alert('Erro de conexão');
+    }
+}
+
+// Carregar configurações
+async function carregarConfiguracoes() {
+    try {
+        const response = await fetchWithAuth('/admin/settings');
+        if (!response) return;
+        const settings = await response.json();
+
+        document.getElementById('cfgNomeEmpresa').value = settings.nome_empresa;
+        document.getElementById('cfgLatitude').value = settings.latitude;
+        document.getElementById('cfgLongitude').value = settings.longitude;
+        document.getElementById('cfgRaio').value = settings.raio_permitido_metros;
+    } catch (error) {
+        console.error('Erro ao carregar configurações:', error);
+    }
+}
+
+// Salvar configurações
+async function salvarConfiguracoes(event) {
+    event.preventDefault();
+    const alertEl = document.getElementById('alertConfig');
+
+    const dados = {
+        nome_empresa: document.getElementById('cfgNomeEmpresa').value,
+        latitude: parseFloat(document.getElementById('cfgLatitude').value),
+        longitude: parseFloat(document.getElementById('cfgLongitude').value),
+        raio_permitido_metros: parseInt(document.getElementById('cfgRaio').value)
+    };
+
+    try {
+        const response = await fetchWithAuth('/admin/settings', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(dados)
+        });
+
+        if (!response) return;
+        if (response.ok) {
+            alertEl.className = 'alert alert-success mt-3';
+            alertEl.textContent = 'Configurações salvas com sucesso!';
+            alertEl.classList.remove('d-none');
+        } else {
+            alertEl.className = 'alert alert-danger mt-3';
+            alertEl.textContent = 'Erro ao salvar configurações';
+            alertEl.classList.remove('d-none');
+        }
+    } catch (error) {
+        alertEl.className = 'alert alert-danger mt-3';
+        alertEl.textContent = 'Erro de conexão';
+        alertEl.classList.remove('d-none');
+    }
+}
+
+// Obter localização atual
+function obterLocalizacaoAtual() {
+    if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(
+            (position) => {
+                document.getElementById('cfgLatitude').value = position.coords.latitude;
+                document.getElementById('cfgLongitude').value = position.coords.longitude;
+            },
+            (error) => {
+                alert('Não foi possível obter a localização');
+            }
+        );
+    }
+}
+
+// Carregar relatório
+async function carregarRelatorio() {
+    const dataInicio = document.getElementById('relDataInicio').value;
+    const dataFim = document.getElementById('relDataFim').value;
+    const funcionario = document.getElementById('relFuncionario').value;
+
+    try {
+        // Carrega resumo
+        const resumoResponse = await fetchWithAuth(`/admin/relatorio/resumo?data_inicio=${dataInicio}&data_fim=${dataFim}`);
+        if (!resumoResponse) return;
+        const resumo = await resumoResponse.json();
+
+        const tbodyResumo = document.getElementById('tabelaResumo');
+        if (resumo.funcionarios.length > 0) {
+            tbodyResumo.innerHTML = resumo.funcionarios.map(f => `
+                <tr>
+                    <td>${f.nome}</td>
+                    <td>${f.matricula}</td>
+                    <td><strong>${f.total_horas}</strong></td>
+                    <td>${f.dias_trabalhados}</td>
+                    <td>${f.registros_fora_raio > 0 ?
+                        `<span class="badge bg-warning text-dark">${f.registros_fora_raio}</span>` :
+                        '<span class="badge bg-success">0</span>'}</td>
+                </tr>
+            `).join('');
+        } else {
+            tbodyResumo.innerHTML = '<tr><td colspan="5" class="text-center text-muted">Nenhum registro no período</td></tr>';
+        }
+
+        // Carrega registros detalhados
+        let url = `/admin/relatorio?data_inicio=${dataInicio}&data_fim=${dataFim}`;
+        if (funcionario) url += `&user_id=${funcionario}`;
+
+        const response = await fetchWithAuth(url);
+        if (!response) return;
+        const data = await response.json();
+
+        document.getElementById('totalRegistros').textContent = data.total_registros;
+        document.getElementById('totalFuncionarios').textContent = data.total_funcionarios;
+        document.getElementById('foraRaio').textContent = data.registros.filter(r => !r.dentro_raio).length;
+
+        // Calcula total de horas do resumo
+        let totalMinutos = 0;
+        resumo.funcionarios.forEach(f => {
+            const partes = f.total_horas.split(':');
+            totalMinutos += parseInt(partes[0]) * 60 + parseInt(partes[1]);
+        });
+        const horasTotal = Math.floor(totalMinutos / 60);
+        const minutosTotal = totalMinutos % 60;
+        document.getElementById('totalHoras').textContent = `${horasTotal}h${minutosTotal > 0 ? minutosTotal + 'm' : ''}`;
+
+        const tbody = document.getElementById('tabelaRelatorio');
+        if (data.registros.length > 0) {
+            tbody.innerHTML = data.registros.map(r => `
+                <tr>
+                    <td>${new Date(r.timestamp).toLocaleDateString('pt-BR')}</td>
+                    <td>${new Date(r.timestamp).toLocaleTimeString('pt-BR')}</td>
+                    <td>${r.nome_funcionario}</td>
+                    <td>${r.matricula}</td>
+                    <td><span class="badge ${r.tipo === 'entrada' ? 'bg-success' : 'bg-danger'}">${r.tipo.toUpperCase()}</span></td>
+                    <td>${r.latitude && r.longitude ? `${r.latitude.toFixed(4)}, ${r.longitude.toFixed(4)}` : 'N/D'}</td>
+                    <td>${r.dentro_raio ? '<span class="badge bg-success">OK</span>' : '<span class="badge bg-warning text-dark">Fora</span>'}</td>
+                    <td>${r.face_detected === true ? '<i class="bi bi-person-check text-success"></i>' :
+                         r.face_detected === false ? '<i class="bi bi-person-x text-warning"></i>' : '-'}</td>
+                </tr>
+            `).join('');
+        } else {
+            tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted">Nenhum registro encontrado</td></tr>';
+        }
+    } catch (error) {
+        console.error('Erro ao carregar relatório:', error);
+    }
+}
+
+// Exportar relatório CSV
+function exportarRelatorio() {
+    const dataInicio = document.getElementById('relDataInicio').value;
+    const dataFim = document.getElementById('relDataFim').value;
+    const funcionario = document.getElementById('relFuncionario').value;
+
+    let url = `/admin/relatorio/export?data_inicio=${dataInicio}&data_fim=${dataFim}`;
+    if (funcionario) url += `&user_id=${funcionario}`;
+
+    window.location.href = url;
+}
+
+// Exportar relatório PDF
+function exportarRelatorioPDF() {
+    const dataInicio = document.getElementById('relDataInicio').value;
+    const dataFim = document.getElementById('relDataFim').value;
+    const funcionario = document.getElementById('relFuncionario').value;
+
+    let url = `/admin/relatorio/export/pdf?data_inicio=${dataInicio}&data_fim=${dataFim}`;
+    if (funcionario) url += `&user_id=${funcionario}`;
+
+    window.location.href = url;
+}
+
+// Modal de deletar
+function abrirModalDeletar() {
+    const dataInicio = document.getElementById('relDataInicio').value;
+    const dataFim = document.getElementById('relDataFim').value;
+    const funcionarioSelect = document.getElementById('relFuncionario');
+    const funcionarioId = funcionarioSelect.value;
+    const funcionarioNome = funcionarioId ?
+        funcionarioSelect.options[funcionarioSelect.selectedIndex].text :
+        'Todos os funcionários';
+
+    document.getElementById('deletePeriodo').textContent =
+        `${new Date(dataInicio + 'T00:00:00').toLocaleDateString('pt-BR')} a ${new Date(dataFim + 'T00:00:00').toLocaleDateString('pt-BR')}`;
+    document.getElementById('deleteFuncionario').textContent = funcionarioNome;
+
+    // Mostra quantidade de registros
+    const totalRegistros = document.getElementById('totalRegistros').textContent;
+    document.getElementById('deleteCount').textContent = totalRegistros;
+    document.getElementById('deletePreview').classList.remove('d-none');
+
+    const modal = new bootstrap.Modal(document.getElementById('modalDeletar'));
+    modal.show();
+}
+
+// Confirmar exclusão
+async function confirmarDeletar() {
+    const dataInicio = document.getElementById('relDataInicio').value;
+    const dataFim = document.getElementById('relDataFim').value;
+    const funcionario = document.getElementById('relFuncionario').value;
+
+    let url = `/admin/registros?data_inicio=${dataInicio}&data_fim=${dataFim}`;
+    if (funcionario) url += `&user_id=${funcionario}`;
+
+    try {
+        const response = await fetchWithAuth(url, { method: 'DELETE' });
+
+        if (!response) return;
+
+        const data = await response.json();
+
+        if (response.ok) {
+            alert(`Deletados ${data.registros_deletados} registros e ${data.fotos_deletadas} fotos.`);
+            bootstrap.Modal.getInstance(document.getElementById('modalDeletar')).hide();
+            carregarRelatorio();
+        } else {
+            alert(data.detail || 'Erro ao deletar registros');
+        }
+    } catch (error) {
+        alert('Erro de conexão');
+    }
+}
+
+// ============= LOCAIS =============
+
+// Carregar locais
+async function carregarLocais() {
+    try {
+        const response = await fetchWithAuth('/admin/locations');
+        if (!response) return;
+        const locations = await response.json();
+
+        const tbody = document.getElementById('tabelaLocais');
+        if (locations.length > 0) {
+            tbody.innerHTML = locations.map(loc => `
+                <tr>
+                    <td><strong>${loc.nome}</strong></td>
+                    <td><small>${loc.latitude.toFixed(6)}, ${loc.longitude.toFixed(6)}</small></td>
+                    <td>${loc.raio_metros}m</td>
+                    <td>${loc.ativo ?
+                        '<span class="badge bg-success">Ativo</span>' :
+                        '<span class="badge bg-secondary">Inativo</span>'}</td>
+                    <td>
+                        <button class="btn btn-sm btn-outline-${loc.ativo ? 'warning' : 'success'}" onclick="toggleLocal(${loc.id}, ${loc.ativo})">
+                            ${loc.ativo ? 'Desativar' : 'Ativar'}
+                        </button>
+                        <button class="btn btn-sm btn-outline-danger" onclick="deletarLocal(${loc.id})">
+                            <i class="bi bi-trash"></i>
+                        </button>
+                    </td>
+                </tr>
+            `).join('');
+        } else {
+            tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted">Nenhum local cadastrado. Adicione pelo menos um local para habilitar o registro de presença por geolocalização.</td></tr>';
+        }
+    } catch (error) {
+        console.error('Erro ao carregar locais:', error);
+    }
+}
+
+// Obter localização atual para novo local
+function obterLocalizacaoLocal() {
+    if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(
+            (position) => {
+                document.getElementById('localLatitude').value = position.coords.latitude;
+                document.getElementById('localLongitude').value = position.coords.longitude;
+            },
+            (error) => {
+                alert('Não foi possível obter a localização');
+            }
+        );
+    }
+}
+
+// Cadastrar novo local
+async function cadastrarLocal(event) {
+    event.preventDefault();
+    const alertEl = document.getElementById('alertLocal');
+
+    const dados = {
+        nome: document.getElementById('localNome').value,
+        latitude: parseFloat(document.getElementById('localLatitude').value),
+        longitude: parseFloat(document.getElementById('localLongitude').value),
+        raio_metros: parseInt(document.getElementById('localRaio').value)
+    };
+
+    try {
+        const response = await fetchWithAuth('/admin/locations', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(dados)
+        });
+
+        if (!response) return;
+        if (response.ok) {
+            alertEl.className = 'alert alert-success mt-3';
+            alertEl.textContent = 'Local cadastrado com sucesso!';
+            alertEl.classList.remove('d-none');
+            document.getElementById('formNovoLocal').reset();
+            document.getElementById('localRaio').value = '100';
+            carregarLocais();
+        } else {
+            const data = await response.json();
+            alertEl.className = 'alert alert-danger mt-3';
+            alertEl.textContent = data.detail || 'Erro ao cadastrar local';
+            alertEl.classList.remove('d-none');
+        }
+    } catch (error) {
+        alertEl.className = 'alert alert-danger mt-3';
+        alertEl.textContent = 'Erro de conexão';
+        alertEl.classList.remove('d-none');
+    }
+}
+
+// Toggle ativo/inativo local
+async function toggleLocal(locationId, isAtivo) {
+    try {
+        const response = await fetchWithAuth(`/admin/locations/${locationId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ativo: !isAtivo })
+        });
+
+        if (!response) return;
+        if (response.ok) {
+            carregarLocais();
+        } else {
+            const data = await response.json();
+            alert(data.detail || 'Erro ao alterar status');
+        }
+    } catch (error) {
+        alert('Erro de conexão');
+    }
+}
+
+// Deletar local
+async function deletarLocal(locationId) {
+    if (!confirm('Tem certeza que deseja remover este local?')) return;
+
+    try {
+        const response = await fetchWithAuth(`/admin/locations/${locationId}`, {
+            method: 'DELETE'
+        });
+
+        if (!response) return;
+        if (response.ok) {
+            carregarLocais();
+        } else {
+            const data = await response.json();
+            alert(data.detail || 'Erro ao remover local');
+        }
+    } catch (error) {
+        alert('Erro de conexão');
+    }
+}
+</script>
+{% endblock %}

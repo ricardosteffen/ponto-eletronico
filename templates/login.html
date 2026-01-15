@@ -1,0 +1,110 @@
+{% extends "base.html" %}
+
+{% block title %}Login - Registro de Presença PUC-Rio{% endblock %}
+
+{% block content %}
+<div class="login-container">
+    <div class="container">
+        <div class="row justify-content-center align-items-center min-vh-100">
+            <div class="col-md-5 col-lg-4">
+                <div class="card shadow-lg">
+                    <div class="card-body p-5">
+                        <div class="text-center mb-4">
+                            <div class="logo-container">
+                                <img src="/static/img/logo.png" alt="PUC-Rio" style="width: 260px; max-width: 100%; height: auto;" onerror="this.style.display='none'">
+                            </div>
+                            <h2 class="mt-3" style="color: var(--puc-green-dark);">Registro de Presença</h2>
+                            <p class="text-muted">Faça login para continuar</p>
+                        </div>
+
+                        <div id="alertBox" class="alert d-none" role="alert"></div>
+
+                        <form id="loginForm" onsubmit="handleLogin(event)">
+                            <div class="mb-3">
+                                <label for="email" class="form-label">Email</label>
+                                <div class="input-group">
+                                    <span class="input-group-text"><i class="bi bi-envelope"></i></span>
+                                    <input type="email" class="form-control" id="email" name="email" required
+                                           placeholder="seu@email.com">
+                                </div>
+                            </div>
+                            <div class="mb-4">
+                                <label for="senha" class="form-label">Senha</label>
+                                <div class="input-group">
+                                    <span class="input-group-text"><i class="bi bi-lock"></i></span>
+                                    <input type="password" class="form-control" id="senha" name="senha" required
+                                           placeholder="Sua senha">
+                                </div>
+                            </div>
+                            <button type="submit" class="btn btn-primary w-100 py-2" id="btnLogin">
+                                <span class="spinner-border spinner-border-sm d-none" id="loginSpinner"></span>
+                                <span id="btnLoginText">Entrar</span>
+                            </button>
+                        </form>
+                        <hr class="my-4">
+                        <p class="text-center mb-0">
+                            Não tem conta? <a href="/cadastro" class="text-decoration-none" style="color: var(--puc-green);">Cadastre-se</a>
+                        </p>
+                    </div>
+                </div>
+                <p class="text-center mt-3 text-white-50">
+                    <small>Desenvolvido por Ricardo Steffen &copy; 2026</small>
+                </p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Se já está logado, redireciona para dashboard
+if (localStorage.getItem('token')) {
+    window.location.href = '/dashboard';
+}
+
+async function handleLogin(event) {
+    event.preventDefault();
+
+    const spinner = document.getElementById('loginSpinner');
+    const btnText = document.getElementById('btnLoginText');
+    const alertBox = document.getElementById('alertBox');
+
+    spinner.classList.remove('d-none');
+    btnText.textContent = 'Entrando...';
+    alertBox.classList.add('d-none');
+
+    const email = document.getElementById('email').value;
+    const senha = document.getElementById('senha').value;
+
+    try {
+        const response = await fetch('/auth/login', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ email, senha })
+        });
+
+        const data = await response.json();
+
+        if (response.ok) {
+            localStorage.setItem('token', data.access_token);
+            localStorage.setItem('user', JSON.stringify(data.user));
+            window.location.href = '/dashboard';
+        } else {
+            alertBox.className = 'alert alert-danger';
+            alertBox.textContent = data.detail || 'Erro ao fazer login';
+            alertBox.classList.remove('d-none');
+        }
+    } catch (error) {
+        alertBox.className = 'alert alert-danger';
+        alertBox.textContent = 'Erro de conexão. Tente novamente.';
+        alertBox.classList.remove('d-none');
+    } finally {
+        spinner.classList.add('d-none');
+        btnText.textContent = 'Entrar';
+    }
+}
+</script>
+{% endblock %}
