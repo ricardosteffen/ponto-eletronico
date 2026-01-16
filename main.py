@@ -3,6 +3,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
+from sqlalchemy import text, inspect
 import os
 
 from app.database import engine, Base, get_db, SessionLocal
@@ -11,7 +12,78 @@ from app.routes import auth_router, ponto_router, admin_router, super_admin_rout
 from app.utils.auth import get_password_hash
 from config import DEFAULT_COMPANY_LATITUDE, DEFAULT_COMPANY_LONGITUDE, DEFAULT_ALLOWED_RADIUS_METERS, PORT
 
-# Cria as tabelas no banco de dados
+
+def run_migrations():
+    """Executa migrações do banco de dados para adicionar novas colunas."""
+    inspector = inspect(engine)
+
+    with engine.connect() as conn:
+        # Detecta se é PostgreSQL ou SQLite
+        is_postgres = 'postgresql' in str(engine.url)
+
+        # Verifica se tabela cursos existe
+        if not inspector.has_table('cursos'):
+            print("Criando tabela cursos...")
+            if is_postgres:
+                conn.execute(text("""
+                    CREATE TABLE cursos (
+                        id SERIAL PRIMARY KEY,
+                        nome VARCHAR(100) NOT NULL,
+                        slug VARCHAR(50) UNIQUE NOT NULL,
+                        ativo BOOLEAN DEFAULT true,
+                        created_at TIMESTAMP DEFAULT NOW(),
+                        updated_at TIMESTAMP DEFAULT NOW()
+                    )
+                """))
+            else:
+                conn.execute(text("""
+                    CREATE TABLE cursos (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        nome VARCHAR(100) NOT NULL,
+                        slug VARCHAR(50) UNIQUE NOT NULL,
+                        ativo BOOLEAN DEFAULT 1,
+                        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                    )
+                """))
+            conn.commit()
+            print("Tabela cursos criada!")
+
+        # Verifica colunas na tabela users
+        user_columns = [col['name'] for col in inspector.get_columns('users')]
+
+        if 'is_super_admin' not in user_columns:
+            print("Adicionando coluna is_super_admin em users...")
+            if is_postgres:
+                conn.execute(text("ALTER TABLE users ADD COLUMN is_super_admin BOOLEAN DEFAULT false"))
+            else:
+                conn.execute(text("ALTER TABLE users ADD COLUMN is_super_admin BOOLEAN DEFAULT 0"))
+            conn.commit()
+            print("Coluna is_super_admin adicionada!")
+
+        if 'curso_id' not in user_columns:
+            print("Adicionando coluna curso_id em users...")
+            conn.execute(text("ALTER TABLE users ADD COLUMN curso_id INTEGER"))
+            conn.commit()
+            print("Coluna curso_id adicionada em users!")
+
+        # Verifica colunas na tabela locations
+        if inspector.has_table('locations'):
+            location_columns = [col['name'] for col in inspector.get_columns('locations')]
+
+            if 'curso_id' not in location_columns:
+                print("Adicionando coluna curso_id em locations...")
+                conn.execute(text("ALTER TABLE locations ADD COLUMN curso_id INTEGER"))
+                conn.commit()
+                print("Coluna curso_id adicionada em locations!")
+
+    print("Migrações concluídas!")
+
+
+# Executa migrações antes de criar tabelas
+run_migrations()
+
+# Cria as tabelas no banco de dados (para tabelas novas)
 Base.metadata.create_all(bind=engine)
 
 app = FastAPI(
