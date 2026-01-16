@@ -355,8 +355,14 @@
 <script>
 // Verifica autenticação e permissão admin
 const currentUser = JSON.parse(localStorage.getItem('user') || 'null');
-if (!localStorage.getItem('token') || !currentUser || !currentUser.is_admin) {
-    window.location.href = '/login';
+if (!localStorage.getItem('token') || !currentUser || (!currentUser.is_admin && !currentUser.is_super_admin)) {
+    // Tenta extrair o slug do curso da URL atual
+    const pathParts = window.location.pathname.split('/').filter(p => p);
+    if (pathParts.length > 0 && pathParts[0] !== 'admin') {
+        window.location.href = '/' + pathParts[0] + '/login';
+    } else {
+        window.location.href = '/login';
+    }
 }
 
 document.addEventListener('DOMContentLoaded', () => {

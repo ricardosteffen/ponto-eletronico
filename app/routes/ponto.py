@@ -67,12 +67,16 @@ def get_company_settings(db: Session) -> CompanySettings:
     return settings
 
 
-def check_all_locations(db: Session, user_lat: float, user_lon: float):
+def check_all_locations(db: Session, user_lat: float, user_lon: float, curso_id: int = None):
     """
     Verifica se o usuário está dentro do raio de algum local cadastrado.
+    Se curso_id especificado, filtra apenas locais do curso.
     Retorna: (dentro_raio, distancia, location_id, location_name)
     """
-    locations = db.query(Location).filter(Location.ativo == True).all()
+    query = db.query(Location).filter(Location.ativo == True)
+    if curso_id:
+        query = query.filter(Location.curso_id == curso_id)
+    locations = query.all()
 
     if not locations:
         # Se não há locais cadastrados, usa as configurações da empresa
@@ -197,9 +201,9 @@ async def registrar_ponto(
     else:
         tipo = 'saida'
 
-    # Valida geolocalização contra todos os locais cadastrados
+    # Valida geolocalização contra locais do curso do usuário
     dentro_raio, distancia, location_id, location_name = check_all_locations(
-        db, latitude, longitude
+        db, latitude, longitude, current_user.curso_id
     )
 
     # Processa foto se enviada

@@ -2,9 +2,10 @@ from fastapi import APIRouter, Depends, HTTPException, status, Response, Request
 from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
 from pydantic import BaseModel, EmailStr
+from typing import Optional
 from datetime import timedelta
 from app.database import get_db
-from app.models.models import User
+from app.models.models import User, Curso
 from app.utils.auth import (
     verify_password,
     get_password_hash,
@@ -20,6 +21,7 @@ router = APIRouter(prefix="/auth", tags=["Autenticação"])
 class LoginRequest(BaseModel):
     email: str
     senha: str
+    curso_id: Optional[int] = None  # Opcional para login de super admin
 
 
 class UserCreate(BaseModel):
@@ -28,6 +30,7 @@ class UserCreate(BaseModel):
     matricula: str
     senha: str
     is_admin: bool = False
+    curso_id: Optional[int] = None
 
 
 class UserResponse(BaseModel):
@@ -36,7 +39,11 @@ class UserResponse(BaseModel):
     email: str
     matricula: str
     is_admin: bool
+    is_super_admin: bool = False
     ativo: bool
+    curso_id: Optional[int] = None
+    curso_slug: Optional[str] = None
+    curso_nome: Optional[str] = None
 
     class Config:
         from_attributes = True
@@ -54,7 +61,21 @@ async def login(
     response: Response,
     db: Session = Depends(get_db)
 ):
-    user = db.query(User).filter(User.email == login_data.email).first()
+    # Se curso_id especificado, busca usuário no curso específico
+    if login_data.curso_id:
+        user = db.query(User).filter(
+            User.email == login_data.email,
+            User.curso_id == login_data.curso_id
+        ).first()
+    else:
+        # Login sem curso_id - busca primeiro por super admin, depois por qualquer usuário
+        user = db.query(User).filter(
+            User.email == login_data.email,
+            User.is_super_admin == True
+        ).first()
+        if not user:
+            # Fallback para usuário comum (compatibilidade com login antigo)
+            user = db.query(User).filter(User.email == login_data.email).first()
 
     if not user or not verify_password(login_data.senha, user.senha_hash):
         raise HTTPException(
@@ -81,10 +102,32 @@ async def login(
         samesite="lax"
     )
 
+    # Busca informações do curso para a resposta
+    curso_slug = None
+    curso_nome = None
+    if user.curso_id:
+        curso = db.query(Curso).filter(Curso.id == user.curso_id).first()
+        if curso:
+            curso_slug = curso.slug
+            curso_nome = curso.nome
+
+    user_response = UserResponse(
+        id=user.id,
+        nome=user.nome,
+        email=user.email,
+        matricula=user.matricula,
+        is_admin=user.is_admin,
+        is_super_admin=user.is_super_admin,
+        ativo=user.ativo,
+        curso_id=user.curso_id,
+        curso_slug=curso_slug,
+        curso_nome=curso_nome
+    )
+
     return TokenResponse(
         access_token=access_token,
         token_type="bearer",
-        user=UserResponse.model_validate(user)
+        user=user_response
     )
 
 
@@ -105,18 +148,29 @@ async def register_user(
     db: Session = Depends(get_db),
     current_admin: User = Depends(get_current_admin)
 ):
-    # Verifica se email já existe
-    if db.query(User).filter(User.email == user_data.email).first():
+    # Determina o curso_id: usa o especificado ou herda do admin
+    curso_id = user_data.curso_id
+    if curso_id is None and not current_admin.is_super_admin:
+        curso_id = current_admin.curso_id
+
+    # Verifica se email já existe no curso
+    email_query = db.query(User).filter(User.email == user_data.email)
+    if curso_id:
+        email_query = email_query.filter(User.curso_id == curso_id)
+    if email_query.first():
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Email já cadastrado"
+            detail="Email já cadastrado" + (" neste curso" if curso_id else "")
         )
 
-    # Verifica se matrícula já existe
-    if db.query(User).filter(User.matricula == user_data.matricula).first():
+    # Verifica se matrícula já existe no curso
+    matricula_query = db.query(User).filter(User.matricula == user_data.matricula)
+    if curso_id:
+        matricula_query = matricula_query.filter(User.curso_id == curso_id)
+    if matricula_query.first():
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Matrícula já cadastrada"
+            detail="Matrícula já cadastrada" + (" neste curso" if curso_id else "")
         )
 
     new_user = User(
@@ -124,7 +178,8 @@ async def register_user(
         email=user_data.email,
         matricula=user_data.matricula,
         senha_hash=get_password_hash(user_data.senha),
-        is_admin=user_data.is_admin
+        is_admin=user_data.is_admin,
+        curso_id=curso_id
     )
 
     db.add(new_user)
@@ -147,6 +202,13 @@ async def toggle_user_active(
             detail="Usuário não encontrado"
         )
 
+    # Verifica se o admin tem permissão no curso do usuário
+    if not current_admin.is_super_admin and user.curso_id != current_admin.curso_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Você não tem permissão para modificar este usuário"
+        )
+
     if user.id == current_admin.id:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -165,6 +227,7 @@ class SignupRequest(BaseModel):
     email: EmailStr
     matricula: str
     senha: str
+    curso_id: Optional[int] = None
 
 
 @router.post("/signup", response_model=UserResponse)
@@ -173,19 +236,52 @@ async def signup(
     db: Session = Depends(get_db)
 ):
     """Auto-cadastro de usuários (sem necessidade de admin)"""
-    # Verifica se email já existe
-    if db.query(User).filter(User.email == user_data.email).first():
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Email já cadastrado"
-        )
+    # Se curso_id especificado, valida que o curso existe
+    if user_data.curso_id:
+        curso = db.query(Curso).filter(
+            Curso.id == user_data.curso_id,
+            Curso.ativo == True
+        ).first()
+        if not curso:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Curso não encontrado ou inativo"
+            )
 
-    # Verifica se matrícula já existe
-    if db.query(User).filter(User.matricula == user_data.matricula).first():
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Matrícula já cadastrada"
-        )
+        # Verifica se email já existe no curso
+        if db.query(User).filter(
+            User.email == user_data.email,
+            User.curso_id == user_data.curso_id
+        ).first():
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Email já cadastrado neste curso"
+            )
+
+        # Verifica se matrícula já existe no curso
+        if db.query(User).filter(
+            User.matricula == user_data.matricula,
+            User.curso_id == user_data.curso_id
+        ).first():
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Matrícula já cadastrada neste curso"
+            )
+    else:
+        # Cadastro sem curso (fallback para compatibilidade)
+        # Verifica se email já existe globalmente
+        if db.query(User).filter(User.email == user_data.email).first():
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Email já cadastrado"
+            )
+
+        # Verifica se matrícula já existe globalmente
+        if db.query(User).filter(User.matricula == user_data.matricula).first():
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Matrícula já cadastrada"
+            )
 
     new_user = User(
         nome=user_data.nome,
@@ -193,7 +289,8 @@ async def signup(
         matricula=user_data.matricula,
         senha_hash=get_password_hash(user_data.senha),
         is_admin=False,  # Auto-cadastro nunca é admin
-        ativo=True
+        ativo=True,
+        curso_id=user_data.curso_id
     )
 
     db.add(new_user)
@@ -215,6 +312,13 @@ async def delete_user(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Usuário não encontrado"
+        )
+
+    # Verifica se o admin tem permissão no curso do usuário
+    if not current_admin.is_super_admin and user.curso_id != current_admin.curso_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Você não tem permissão para apagar este usuário"
         )
 
     if user.id == current_admin.id:

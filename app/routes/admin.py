@@ -111,7 +111,11 @@ async def list_users(
     db: Session = Depends(get_db),
     current_admin: User = Depends(get_current_admin)
 ):
-    users = db.query(User).order_by(User.nome).all()
+    # Super admin vê todos os usuários, admin comum só vê do seu curso
+    query = db.query(User)
+    if not current_admin.is_super_admin and current_admin.curso_id:
+        query = query.filter(User.curso_id == current_admin.curso_id)
+    users = query.order_by(User.nome).all()
     return [UserListResponse.model_validate(u) for u in users]
 
 
@@ -187,6 +191,10 @@ async def get_relatorio(
         )
     )
 
+    # Filtra por curso se não for super admin
+    if not current_admin.is_super_admin and current_admin.curso_id:
+        query = query.filter(User.curso_id == current_admin.curso_id)
+
     if user_id:
         query = query.filter(TimeRecord.user_id == user_id)
 
@@ -231,7 +239,11 @@ async def get_relatorio_resumo(
     inicio = datetime.combine(data_inicio, datetime.min.time())
     fim = datetime.combine(data_fim, datetime.max.time())
 
-    users = db.query(User).filter(User.ativo == True).all()
+    # Filtra por curso se não for super admin
+    query = db.query(User).filter(User.ativo == True)
+    if not current_admin.is_super_admin and current_admin.curso_id:
+        query = query.filter(User.curso_id == current_admin.curso_id)
+    users = query.all()
 
     funcionarios = []
     for user in users:
@@ -287,6 +299,10 @@ async def export_relatorio(
         )
     )
 
+    # Filtra por curso se não for super admin
+    if not current_admin.is_super_admin and current_admin.curso_id:
+        query = query.filter(User.curso_id == current_admin.curso_id)
+
     if user_id:
         query = query.filter(TimeRecord.user_id == user_id)
 
@@ -339,12 +355,23 @@ async def delete_registros(
     inicio = datetime.combine(data_inicio, datetime.min.time())
     fim = datetime.combine(data_fim, datetime.max.time())
 
-    query = db.query(TimeRecord).filter(
-        and_(
-            TimeRecord.timestamp >= inicio,
-            TimeRecord.timestamp <= fim
+    # Se não for super admin, filtra por usuários do curso
+    if not current_admin.is_super_admin and current_admin.curso_id:
+        user_ids_curso = db.query(User.id).filter(User.curso_id == current_admin.curso_id).subquery()
+        query = db.query(TimeRecord).filter(
+            and_(
+                TimeRecord.timestamp >= inicio,
+                TimeRecord.timestamp <= fim,
+                TimeRecord.user_id.in_(user_ids_curso)
+            )
         )
-    )
+    else:
+        query = db.query(TimeRecord).filter(
+            and_(
+                TimeRecord.timestamp >= inicio,
+                TimeRecord.timestamp <= fim
+            )
+        )
 
     if user_id:
         query = query.filter(TimeRecord.user_id == user_id)
@@ -403,6 +430,10 @@ async def export_relatorio_pdf(
             TimeRecord.timestamp <= fim
         )
     )
+
+    # Filtra por curso se não for super admin
+    if not current_admin.is_super_admin and current_admin.curso_id:
+        query = query.filter(User.curso_id == current_admin.curso_id)
 
     if user_id:
         query = query.filter(TimeRecord.user_id == user_id)
@@ -528,8 +559,12 @@ async def list_locations(
     db: Session = Depends(get_db),
     current_admin: User = Depends(get_current_admin)
 ):
-    """Lista todos os locais cadastrados."""
-    locations = db.query(Location).order_by(Location.nome).all()
+    """Lista todos os locais cadastrados do curso."""
+    query = db.query(Location)
+    # Filtra por curso se não for super admin
+    if not current_admin.is_super_admin and current_admin.curso_id:
+        query = query.filter(Location.curso_id == current_admin.curso_id)
+    locations = query.order_by(Location.nome).all()
     return [LocationResponse.model_validate(loc) for loc in locations]
 
 
@@ -539,12 +574,16 @@ async def create_location(
     db: Session = Depends(get_db),
     current_admin: User = Depends(get_current_admin)
 ):
-    """Cria um novo local."""
+    """Cria um novo local para o curso do admin."""
+    # Define o curso_id baseado no admin (super admin pode não ter curso)
+    curso_id = current_admin.curso_id
+
     location = Location(
         nome=location_data.nome,
         latitude=location_data.latitude,
         longitude=location_data.longitude,
-        raio_metros=location_data.raio_metros
+        raio_metros=location_data.raio_metros,
+        curso_id=curso_id
     )
     db.add(location)
     db.commit()
@@ -565,6 +604,13 @@ async def update_location(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Local não encontrado"
+        )
+
+    # Verifica permissão do admin no curso do local
+    if not current_admin.is_super_admin and location.curso_id != current_admin.curso_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Você não tem permissão para modificar este local"
         )
 
     if location_data.nome is not None:
@@ -595,6 +641,13 @@ async def delete_location(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Local não encontrado"
+        )
+
+    # Verifica permissão do admin no curso do local
+    if not current_admin.is_super_admin and location.curso_id != current_admin.curso_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Você não tem permissão para remover este local"
         )
 
     db.delete(location)

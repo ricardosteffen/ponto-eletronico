@@ -131,7 +131,13 @@
 <script>
 // Verifica autenticação
 if (!localStorage.getItem('token')) {
-    window.location.href = '/login';
+    // Tenta extrair o slug do curso da URL atual
+    const pathParts = window.location.pathname.split('/').filter(p => p);
+    if (pathParts.length > 0 && pathParts[0] !== 'dashboard') {
+        window.location.href = '/' + pathParts[0] + '/login';
+    } else {
+        window.location.href = '/login';
+    }
 }
 
 let currentLocation = null;

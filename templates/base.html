@@ -21,9 +21,9 @@
 <body>
     <nav class="navbar navbar-expand-lg navbar-dark bg-primary" id="mainNav" style="display: none;">
         <div class="container">
-            <a class="navbar-brand" href="/dashboard">
+            <a class="navbar-brand" href="#" id="dashboardLink">
                 <img src="/static/img/logo.png" alt="PUC-Rio" height="30" class="me-2" onerror="this.style.display='none'">
-                <span>Registro de Presença</span>
+                <span id="navBrandText">Registro de Presença</span>
             </a>
             <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
                 <span class="navbar-toggler-icon"></span>
@@ -31,13 +31,18 @@
             <div class="collapse navbar-collapse" id="navbarNav">
                 <ul class="navbar-nav me-auto">
                     <li class="nav-item">
-                        <a class="nav-link" href="/dashboard">
+                        <a class="nav-link" href="#" id="navDashboard">
                             <i class="bi bi-speedometer2"></i> Dashboard
                         </a>
                     </li>
                     <li class="nav-item" id="adminLink" style="display: none;">
-                        <a class="nav-link" href="/admin">
+                        <a class="nav-link" href="#" id="navAdmin">
                             <i class="bi bi-gear"></i> Administração
+                        </a>
+                    </li>
+                    <li class="nav-item" id="superAdminLink" style="display: none;">
+                        <a class="nav-link" href="/super-admin">
+                            <i class="bi bi-shield-lock"></i> Super Admin
                         </a>
                     </li>
                 </ul>
@@ -48,6 +53,7 @@
                         </a>
                         <ul class="dropdown-menu dropdown-menu-end">
                             <li><span class="dropdown-item-text text-muted" id="userMatricula"></span></li>
+                            <li><span class="dropdown-item-text text-muted small" id="userCurso"></span></li>
                             <li><hr class="dropdown-divider"></li>
                             <li><a class="dropdown-item" href="#" onclick="logout()"><i class="bi bi-box-arrow-right"></i> Sair</a></li>
                         </ul>
@@ -73,16 +79,36 @@
         // Inicializa navbar com dados do usuário
         document.addEventListener('DOMContentLoaded', () => {
             const user = JSON.parse(localStorage.getItem('user') || 'null');
-            const isLoginPage = window.location.pathname === '/login';
+            const isLoginPage = window.location.pathname.includes('/login');
+            const isCadastroPage = window.location.pathname.includes('/cadastro');
 
-            if (user && !isLoginPage) {
+            if (user && !isLoginPage && !isCadastroPage) {
                 document.getElementById('mainNav').style.display = 'block';
                 document.getElementById('mainFooter').style.display = 'block';
                 document.getElementById('userName').textContent = user.nome;
                 document.getElementById('userMatricula').textContent = user.matricula;
 
-                if (user.is_admin) {
+                // Determina o prefixo de URL baseado no curso do usuário
+                const cursoSlug = user.curso_slug || '';
+                const baseUrl = cursoSlug ? '/' + cursoSlug : '';
+
+                // Atualiza links de navegação
+                document.getElementById('dashboardLink').href = baseUrl + '/dashboard';
+                document.getElementById('navDashboard').href = baseUrl + '/dashboard';
+                document.getElementById('navAdmin').href = baseUrl + '/admin';
+
+                // Mostra nome do curso se houver
+                const cursoEl = document.getElementById('userCurso');
+                if (cursoEl && user.curso_nome) {
+                    cursoEl.textContent = user.curso_nome;
+                }
+
+                if (user.is_admin || user.is_super_admin) {
                     document.getElementById('adminLink').style.display = 'block';
+                }
+
+                if (user.is_super_admin) {
+                    document.getElementById('superAdminLink').style.display = 'block';
                 }
             }
         });

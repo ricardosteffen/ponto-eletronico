@@ -9,7 +9,7 @@ import sys
 sys.path.append('../..')
 from config import SECRET_KEY, ALGORITHM, ACCESS_TOKEN_EXPIRE_MINUTES
 from app.database import get_db
-from app.models.models import User
+from app.models.models import User, Curso
 
 security = HTTPBearer(auto_error=False)
 
@@ -88,10 +88,60 @@ async def get_current_user(
 
 
 async def get_current_admin(current_user: User = Depends(get_current_user)) -> User:
-    if not current_user.is_admin:
+    if not current_user.is_admin and not current_user.is_super_admin:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Acesso permitido apenas para administradores"
+        )
+    return current_user
+
+
+async def get_current_super_admin(current_user: User = Depends(get_current_user)) -> User:
+    """Verifica se o usuário é super admin (gerencia todos os cursos)."""
+    if not current_user.is_super_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Acesso permitido apenas para super administradores"
+        )
+    return current_user
+
+
+def get_curso_from_path(request: Request, db: Session = Depends(get_db)) -> Optional[Curso]:
+    """Extrai o curso do path da URL (ex: /medicina/dashboard -> curso 'medicina')."""
+    path_parts = request.url.path.strip('/').split('/')
+    if path_parts:
+        curso_slug = path_parts[0]
+        # Ignora paths que não são de curso (static, api, super-admin, etc.)
+        if curso_slug not in ['static', 'uploads', 'api', 'super-admin', 'docs', 'openapi.json']:
+            curso = db.query(Curso).filter(Curso.slug == curso_slug, Curso.ativo == True).first()
+            return curso
+    return None
+
+
+async def get_required_curso(request: Request, db: Session = Depends(get_db)) -> Curso:
+    """Exige que um curso válido esteja no path."""
+    curso = get_curso_from_path(request, db)
+    if not curso:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Curso não encontrado"
+        )
+    return curso
+
+
+async def validate_user_curso_access(
+    current_user: User = Depends(get_current_user),
+    curso: Curso = Depends(get_required_curso)
+) -> User:
+    """Valida que o usuário tem acesso ao curso na URL."""
+    # Super admin tem acesso a todos os cursos
+    if current_user.is_super_admin:
+        return current_user
+    # Usuário comum deve pertencer ao curso
+    if current_user.curso_id != curso.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Você não tem acesso a este curso"
         )
     return current_user
 

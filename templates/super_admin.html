@@ -1,0 +1,447 @@
+{% extends "base.html" %}
+
+{% block title %}Super Admin - Gerenciamento de Cursos{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2><i class="bi bi-shield-lock"></i> Super Admin</h2>
+        <button class="btn btn-outline-danger" onclick="logout()">
+            <i class="bi bi-box-arrow-right"></i> Sair
+        </button>
+    </div>
+
+    <!-- Nav Tabs -->
+    <ul class="nav nav-tabs mb-4" id="superAdminTabs" role="tablist">
+        <li class="nav-item">
+            <button class="nav-link active" id="cursos-tab" data-bs-toggle="tab" data-bs-target="#cursos" type="button">
+                <i class="bi bi-book"></i> Cursos
+            </button>
+        </li>
+        <li class="nav-item">
+            <button class="nav-link" id="admins-tab" data-bs-toggle="tab" data-bs-target="#admins" type="button">
+                <i class="bi bi-people"></i> Administradores
+            </button>
+        </li>
+        <li class="nav-item">
+            <button class="nav-link" id="stats-tab" data-bs-toggle="tab" data-bs-target="#stats" type="button">
+                <i class="bi bi-graph-up"></i> Estatísticas
+            </button>
+        </li>
+    </ul>
+
+    <!-- Tab Content -->
+    <div class="tab-content" id="superAdminTabContent">
+        <!-- Tab Cursos -->
+        <div class="tab-pane fade show active" id="cursos" role="tabpanel">
+            <div class="row">
+                <div class="col-lg-4 mb-4">
+                    <div class="card shadow">
+                        <div class="card-header bg-primary text-white">
+                            <h5 class="mb-0"><i class="bi bi-plus-circle"></i> Novo Curso</h5>
+                        </div>
+                        <div class="card-body">
+                            <form id="formNovoCurso" onsubmit="criarCurso(event)">
+                                <div class="mb-3">
+                                    <label class="form-label">Nome do Curso</label>
+                                    <input type="text" class="form-control" id="cursoNome" required placeholder="Ex: Medicina">
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label">Slug (URL)</label>
+                                    <input type="text" class="form-control" id="cursoSlug" required placeholder="Ex: medicina" pattern="[a-z0-9-]+">
+                                    <small class="text-muted">Apenas letras minúsculas, números e hífen</small>
+                                </div>
+                                <button type="submit" class="btn btn-primary w-100">
+                                    <i class="bi bi-plus-circle"></i> Criar Curso
+                                </button>
+                            </form>
+                            <div id="alertCurso" class="alert mt-3 d-none"></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-lg-8">
+                    <div class="card shadow">
+                        <div class="card-header">
+                            <h5 class="mb-0"><i class="bi bi-list"></i> Cursos Cadastrados</h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="table-responsive">
+                                <table class="table table-hover">
+                                    <thead>
+                                        <tr>
+                                            <th>Curso</th>
+                                            <th>URL</th>
+                                            <th>Alunos</th>
+                                            <th>Locais</th>
+                                            <th>Status</th>
+                                            <th>Ações</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="tabelaCursos">
+                                        <tr><td colspan="6" class="text-center">Carregando...</td></tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tab Admins -->
+        <div class="tab-pane fade" id="admins" role="tabpanel">
+            <div class="row">
+                <div class="col-lg-4 mb-4">
+                    <div class="card shadow">
+                        <div class="card-header bg-success text-white">
+                            <h5 class="mb-0"><i class="bi bi-person-plus"></i> Novo Admin</h5>
+                        </div>
+                        <div class="card-body">
+                            <form id="formNovoAdmin" onsubmit="criarAdmin(event)">
+                                <div class="mb-3">
+                                    <label class="form-label">Curso</label>
+                                    <select class="form-select" id="adminCurso" required>
+                                        <option value="">Selecione um curso</option>
+                                    </select>
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label">Nome</label>
+                                    <input type="text" class="form-control" id="adminNome" required>
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label">Email</label>
+                                    <input type="email" class="form-control" id="adminEmail" required>
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label">Matrícula</label>
+                                    <input type="text" class="form-control" id="adminMatricula" required>
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label">Senha</label>
+                                    <input type="password" class="form-control" id="adminSenha" required>
+                                </div>
+                                <button type="submit" class="btn btn-success w-100">
+                                    <i class="bi bi-person-plus"></i> Criar Admin
+                                </button>
+                            </form>
+                            <div id="alertAdmin" class="alert mt-3 d-none"></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-lg-8">
+                    <div class="card shadow">
+                        <div class="card-header">
+                            <h5 class="mb-0"><i class="bi bi-people"></i> Administradores</h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="table-responsive">
+                                <table class="table table-hover">
+                                    <thead>
+                                        <tr>
+                                            <th>Nome</th>
+                                            <th>Email</th>
+                                            <th>Curso</th>
+                                            <th>Tipo</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="tabelaAdmins">
+                                        <tr><td colspan="4" class="text-center">Carregando...</td></tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tab Estatísticas -->
+        <div class="tab-pane fade" id="stats" role="tabpanel">
+            <div class="row" id="statsCards">
+                <div class="col-12">
+                    <p class="text-center text-muted">Carregando estatísticas...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Verifica se é super admin
+document.addEventListener('DOMContentLoaded', () => {
+    const user = JSON.parse(localStorage.getItem('user') || 'null');
+    if (!localStorage.getItem('token') || !user || !user.is_super_admin) {
+        alert('Acesso restrito a super administradores');
+        window.location.href = '/login';
+        return;
+    }
+
+    carregarCursos();
+    carregarAdmins();
+    carregarStats();
+});
+
+// Auto-gerar slug a partir do nome
+document.getElementById('cursoNome').addEventListener('input', (e) => {
+    const slug = e.target.value
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-|-$/g, '');
+    document.getElementById('cursoSlug').value = slug;
+});
+
+// ============= CURSOS =============
+
+async function carregarCursos() {
+    try {
+        const response = await fetchWithAuth('/api/super-admin/cursos');
+        if (!response) return;
+        const cursos = await response.json();
+
+        // Preenche select de cursos
+        const select = document.getElementById('adminCurso');
+        select.innerHTML = '<option value="">Selecione um curso</option>';
+        cursos.forEach(c => {
+            select.innerHTML += `<option value="${c.id}">${c.nome}</option>`;
+        });
+
+        // Preenche tabela
+        const tbody = document.getElementById('tabelaCursos');
+        if (cursos.length > 0) {
+            tbody.innerHTML = cursos.map(c => `
+                <tr>
+                    <td><strong>${c.nome}</strong></td>
+                    <td>
+                        <a href="/${c.slug}/login" target="_blank" class="text-decoration-none">
+                            /${c.slug}
+                        </a>
+                    </td>
+                    <td>${c.total_alunos}</td>
+                    <td>${c.total_locais}</td>
+                    <td>
+                        ${c.ativo ?
+                            '<span class="badge bg-success">Ativo</span>' :
+                            '<span class="badge bg-secondary">Inativo</span>'}
+                    </td>
+                    <td>
+                        <button class="btn btn-sm btn-outline-primary" onclick="acessarCurso('${c.slug}')">
+                            <i class="bi bi-box-arrow-up-right"></i>
+                        </button>
+                        <button class="btn btn-sm btn-outline-${c.ativo ? 'warning' : 'success'}" onclick="toggleCurso(${c.id}, ${c.ativo})">
+                            ${c.ativo ? 'Desativar' : 'Ativar'}
+                        </button>
+                        <button class="btn btn-sm btn-outline-danger" onclick="deletarCurso(${c.id})" ${c.total_alunos > 0 ? 'disabled title="Curso com alunos"' : ''}>
+                            <i class="bi bi-trash"></i>
+                        </button>
+                    </td>
+                </tr>
+            `).join('');
+        } else {
+            tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">Nenhum curso cadastrado</td></tr>';
+        }
+    } catch (error) {
+        console.error('Erro ao carregar cursos:', error);
+    }
+}
+
+async function criarCurso(event) {
+    event.preventDefault();
+    const alertEl = document.getElementById('alertCurso');
+
+    const dados = {
+        nome: document.getElementById('cursoNome').value,
+        slug: document.getElementById('cursoSlug').value.toLowerCase()
+    };
+
+    try {
+        const response = await fetchWithAuth('/api/super-admin/cursos', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(dados)
+        });
+
+        if (!response) return;
+        if (response.ok) {
+            alertEl.className = 'alert alert-success mt-3';
+            alertEl.textContent = 'Curso criado com sucesso!';
+            alertEl.classList.remove('d-none');
+            document.getElementById('formNovoCurso').reset();
+            carregarCursos();
+        } else {
+            const data = await response.json();
+            alertEl.className = 'alert alert-danger mt-3';
+            alertEl.textContent = data.detail || 'Erro ao criar curso';
+            alertEl.classList.remove('d-none');
+        }
+    } catch (error) {
+        alertEl.className = 'alert alert-danger mt-3';
+        alertEl.textContent = 'Erro de conexão';
+        alertEl.classList.remove('d-none');
+    }
+}
+
+async function toggleCurso(cursoId, isAtivo) {
+    try {
+        const response = await fetchWithAuth(`/api/super-admin/cursos/${cursoId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ativo: !isAtivo })
+        });
+
+        if (!response) return;
+        if (response.ok) {
+            carregarCursos();
+        } else {
+            const data = await response.json();
+            alert(data.detail || 'Erro ao alterar status');
+        }
+    } catch (error) {
+        alert('Erro de conexão');
+    }
+}
+
+async function deletarCurso(cursoId) {
+    if (!confirm('Tem certeza que deseja remover este curso?')) return;
+
+    try {
+        const response = await fetchWithAuth(`/api/super-admin/cursos/${cursoId}`, {
+            method: 'DELETE'
+        });
+
+        if (!response) return;
+        if (response.ok) {
+            carregarCursos();
+        } else {
+            const data = await response.json();
+            alert(data.detail || 'Erro ao remover curso');
+        }
+    } catch (error) {
+        alert('Erro de conexão');
+    }
+}
+
+function acessarCurso(slug) {
+    window.open(`/${slug}/admin`, '_blank');
+}
+
+// ============= ADMINS =============
+
+async function carregarAdmins() {
+    try {
+        const response = await fetchWithAuth('/api/super-admin/admins');
+        if (!response) return;
+        const admins = await response.json();
+
+        const tbody = document.getElementById('tabelaAdmins');
+        if (admins.length > 0) {
+            tbody.innerHTML = admins.map(a => `
+                <tr>
+                    <td>${a.nome}</td>
+                    <td>${a.email}</td>
+                    <td>${a.curso_nome || '-'}</td>
+                    <td>
+                        ${a.curso_nome === 'Super Admin' ?
+                            '<span class="badge bg-danger">Super Admin</span>' :
+                            '<span class="badge bg-primary">Admin</span>'}
+                    </td>
+                </tr>
+            `).join('');
+        } else {
+            tbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted">Nenhum administrador</td></tr>';
+        }
+    } catch (error) {
+        console.error('Erro ao carregar admins:', error);
+    }
+}
+
+async function criarAdmin(event) {
+    event.preventDefault();
+    const alertEl = document.getElementById('alertAdmin');
+
+    const dados = {
+        curso_id: parseInt(document.getElementById('adminCurso').value),
+        nome: document.getElementById('adminNome').value,
+        email: document.getElementById('adminEmail').value,
+        matricula: document.getElementById('adminMatricula').value,
+        senha: document.getElementById('adminSenha').value
+    };
+
+    try {
+        const response = await fetchWithAuth('/api/super-admin/admins', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(dados)
+        });
+
+        if (!response) return;
+        if (response.ok) {
+            alertEl.className = 'alert alert-success mt-3';
+            alertEl.textContent = 'Admin criado com sucesso!';
+            alertEl.classList.remove('d-none');
+            document.getElementById('formNovoAdmin').reset();
+            carregarAdmins();
+        } else {
+            const data = await response.json();
+            alertEl.className = 'alert alert-danger mt-3';
+            alertEl.textContent = data.detail || 'Erro ao criar admin';
+            alertEl.classList.remove('d-none');
+        }
+    } catch (error) {
+        alertEl.className = 'alert alert-danger mt-3';
+        alertEl.textContent = 'Erro de conexão';
+        alertEl.classList.remove('d-none');
+    }
+}
+
+// ============= STATS =============
+
+async function carregarStats() {
+    try {
+        const response = await fetchWithAuth('/api/super-admin/stats');
+        if (!response) return;
+        const stats = await response.json();
+
+        const container = document.getElementById('statsCards');
+        if (stats.length > 0) {
+            container.innerHTML = stats.map(s => `
+                <div class="col-md-4 mb-4">
+                    <div class="card shadow h-100">
+                        <div class="card-header bg-primary text-white">
+                            <h5 class="mb-0">${s.curso_nome}</h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="row text-center">
+                                <div class="col-6 mb-3">
+                                    <div class="display-6">${s.total_alunos}</div>
+                                    <small class="text-muted">Alunos</small>
+                                </div>
+                                <div class="col-6 mb-3">
+                                    <div class="display-6">${s.total_admins}</div>
+                                    <small class="text-muted">Admins</small>
+                                </div>
+                                <div class="col-6">
+                                    <div class="display-6">${s.total_locais}</div>
+                                    <small class="text-muted">Locais</small>
+                                </div>
+                                <div class="col-6">
+                                    <div class="display-6">${s.total_registros}</div>
+                                    <small class="text-muted">Registros</small>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+        } else {
+            container.innerHTML = '<div class="col-12"><p class="text-center text-muted">Nenhum curso cadastrado</p></div>';
+        }
+    } catch (error) {
+        console.error('Erro ao carregar estatísticas:', error);
+    }
+}
+</script>
+{% endblock %}

@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Boolean, Float, DateTime, ForeignKey, Text
+from sqlalchemy import Column, Integer, String, Boolean, Float, DateTime, ForeignKey, Text, UniqueConstraint
 from sqlalchemy.orm import relationship
 from datetime import datetime, timezone, timedelta
 from app.database import Base
@@ -10,19 +10,42 @@ def now_brazil():
     return datetime.now(BRAZIL_TZ)
 
 
+class Curso(Base):
+    __tablename__ = "cursos"
+
+    id = Column(Integer, primary_key=True, index=True)
+    nome = Column(String(100), nullable=False)  # "Medicina", "Enfermagem"
+    slug = Column(String(50), unique=True, index=True, nullable=False)  # "medicina" (usado na URL)
+    ativo = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=now_brazil)
+    updated_at = Column(DateTime, default=now_brazil, onupdate=now_brazil)
+
+    usuarios = relationship("User", back_populates="curso")
+    locais = relationship("Location", back_populates="curso")
+
+
 class User(Base):
     __tablename__ = "users"
 
     id = Column(Integer, primary_key=True, index=True)
     nome = Column(String(100), nullable=False)
-    email = Column(String(100), unique=True, index=True, nullable=False)
-    matricula = Column(String(20), unique=True, index=True, nullable=False)
+    email = Column(String(100), index=True, nullable=False)
+    matricula = Column(String(20), index=True, nullable=False)
     senha_hash = Column(String(255), nullable=False)
     is_admin = Column(Boolean, default=False)
+    is_super_admin = Column(Boolean, default=False)  # Super admin gerencia todos os cursos
     ativo = Column(Boolean, default=True)
+    curso_id = Column(Integer, ForeignKey("cursos.id"), nullable=True)  # null = super admin
     created_at = Column(DateTime, default=now_brazil)
     updated_at = Column(DateTime, default=now_brazil, onupdate=now_brazil)
 
+    # Unique constraint: email único por curso (ou global se super admin)
+    __table_args__ = (
+        UniqueConstraint('email', 'curso_id', name='uq_user_email_curso'),
+        UniqueConstraint('matricula', 'curso_id', name='uq_user_matricula_curso'),
+    )
+
+    curso = relationship("Curso", back_populates="usuarios")
     registros = relationship("TimeRecord", back_populates="usuario")
 
 
@@ -67,5 +90,8 @@ class Location(Base):
     longitude = Column(Float, nullable=False)
     raio_metros = Column(Integer, default=100)
     ativo = Column(Boolean, default=True)
+    curso_id = Column(Integer, ForeignKey("cursos.id"), nullable=True)  # Cada local pertence a um curso
     created_at = Column(DateTime, default=now_brazil)
     updated_at = Column(DateTime, default=now_brazil, onupdate=now_brazil)
+
+    curso = relationship("Curso", back_populates="locais")

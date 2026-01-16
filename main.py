@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Request, Depends
+from fastapi import FastAPI, Request, Depends, HTTPException
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from fastapi.responses import RedirectResponse
@@ -6,8 +6,8 @@ from sqlalchemy.orm import Session
 import os
 
 from app.database import engine, Base, get_db, SessionLocal
-from app.models.models import User, CompanySettings
-from app.routes import auth_router, ponto_router, admin_router
+from app.models.models import User, CompanySettings, Curso, Location
+from app.routes import auth_router, ponto_router, admin_router, super_admin_router
 from app.utils.auth import get_password_hash
 from config import DEFAULT_COMPANY_LATITUDE, DEFAULT_COMPANY_LONGITUDE, DEFAULT_ALLOWED_RADIUS_METERS, PORT
 
@@ -31,22 +31,51 @@ templates = Jinja2Templates(directory="templates")
 app.include_router(auth_router)
 app.include_router(ponto_router)
 app.include_router(admin_router)
+app.include_router(super_admin_router)
 
 
 def init_db(db: Session):
     """Inicializa o banco de dados com dados padrão"""
-    admin = db.query(User).filter(User.email == "admin@empresa.com").first()
-    if not admin:
-        admin = User(
-            nome="Administrador",
-            email="admin@empresa.com",
-            matricula="ADMIN001",
-            senha_hash=get_password_hash("admin123"),
-            is_admin=True,
-            ativo=True
+    # Cria curso padrão se não existir
+    default_curso = db.query(Curso).filter(Curso.slug == "default").first()
+    if not default_curso:
+        default_curso = Curso(
+            nome="Curso Padrão",
+            slug="default"
         )
-        db.add(admin)
-        print("Usuário admin criado: admin@empresa.com / admin123")
+        db.add(default_curso)
+        db.flush()
+        print("Curso padrão criado")
+
+    # Cria super admin se não existir
+    super_admin = db.query(User).filter(User.is_super_admin == True).first()
+    if not super_admin:
+        # Verifica se existe admin antigo para converter
+        old_admin = db.query(User).filter(User.email == "admin@empresa.com").first()
+        if old_admin:
+            old_admin.is_super_admin = True
+            print("Usuário admin convertido para super admin")
+        else:
+            super_admin = User(
+                nome="Super Administrador",
+                email="admin@puc.rio",
+                matricula="SUPERADMIN",
+                senha_hash=get_password_hash("admin123"),
+                is_admin=True,
+                is_super_admin=True,
+                ativo=True,
+                curso_id=None  # Super admin não pertence a nenhum curso específico
+            )
+            db.add(super_admin)
+            print("Super admin criado: admin@puc.rio / admin123")
+
+    # Associa usuários/locais órfãos ao curso padrão
+    db.query(User).filter(
+        User.curso_id == None,
+        User.is_super_admin == False
+    ).update({"curso_id": default_curso.id})
+
+    db.query(Location).filter(Location.curso_id == None).update({"curso_id": default_curso.id})
 
     settings = db.query(CompanySettings).first()
     if not settings:
@@ -102,6 +131,61 @@ async def dashboard_page(request: Request):
 @app.get("/admin")
 async def admin_page(request: Request):
     return templates.TemplateResponse("admin.html", {"request": request, "user": {"nome": "", "is_admin": True}})
+
+
+# ============= SUPER ADMIN =============
+
+@app.get("/super-admin")
+async def super_admin_page(request: Request):
+    return templates.TemplateResponse("super_admin.html", {"request": request})
+
+
+# ============= ROTAS POR CURSO =============
+
+def get_curso_or_404(db: Session, curso_slug: str) -> Curso:
+    """Helper para buscar curso ou retornar 404."""
+    curso = db.query(Curso).filter(Curso.slug == curso_slug, Curso.ativo == True).first()
+    if not curso:
+        raise HTTPException(status_code=404, detail="Curso não encontrado")
+    return curso
+
+
+@app.get("/{curso_slug}/login")
+async def curso_login_page(request: Request, curso_slug: str, db: Session = Depends(get_db)):
+    curso = get_curso_or_404(db, curso_slug)
+    return templates.TemplateResponse("curso_login.html", {
+        "request": request,
+        "curso": {"id": curso.id, "nome": curso.nome, "slug": curso.slug}
+    })
+
+
+@app.get("/{curso_slug}/cadastro")
+async def curso_cadastro_page(request: Request, curso_slug: str, db: Session = Depends(get_db)):
+    curso = get_curso_or_404(db, curso_slug)
+    return templates.TemplateResponse("curso_cadastro.html", {
+        "request": request,
+        "curso": {"id": curso.id, "nome": curso.nome, "slug": curso.slug}
+    })
+
+
+@app.get("/{curso_slug}/dashboard")
+async def curso_dashboard_page(request: Request, curso_slug: str, db: Session = Depends(get_db)):
+    curso = get_curso_or_404(db, curso_slug)
+    return templates.TemplateResponse("dashboard.html", {
+        "request": request,
+        "user": {"nome": ""},
+        "curso": {"id": curso.id, "nome": curso.nome, "slug": curso.slug}
+    })
+
+
+@app.get("/{curso_slug}/admin")
+async def curso_admin_page(request: Request, curso_slug: str, db: Session = Depends(get_db)):
+    curso = get_curso_or_404(db, curso_slug)
+    return templates.TemplateResponse("admin.html", {
+        "request": request,
+        "user": {"nome": "", "is_admin": True},
+        "curso": {"id": curso.id, "nome": curso.nome, "slug": curso.slug}
+    })
 
 
 if __name__ == "__main__":
