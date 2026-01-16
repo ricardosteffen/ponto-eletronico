@@ -230,6 +230,22 @@ class SignupRequest(BaseModel):
     curso_id: Optional[int] = None
 
 
+class CursoPublico(BaseModel):
+    id: int
+    nome: str
+    slug: str
+
+    class Config:
+        from_attributes = True
+
+
+@router.get("/cursos", response_model=list[CursoPublico])
+async def list_cursos_publicos(db: Session = Depends(get_db)):
+    """Lista cursos disponíveis para cadastro (endpoint público)."""
+    cursos = db.query(Curso).filter(Curso.ativo == True).order_by(Curso.nome).all()
+    return [CursoPublico.model_validate(c) for c in cursos]
+
+
 @router.post("/signup", response_model=UserResponse)
 async def signup(
     user_data: SignupRequest,

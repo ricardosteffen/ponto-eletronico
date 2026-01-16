@@ -44,6 +44,15 @@
                                            placeholder="Sua matrícula">
                                 </div>
                             </div>
+                            <div class="mb-3">
+                                <label for="curso" class="form-label">Curso</label>
+                                <div class="input-group">
+                                    <span class="input-group-text"><i class="bi bi-book"></i></span>
+                                    <select class="form-select" id="curso" name="curso" required>
+                                        <option value="">Carregando cursos...</option>
+                                    </select>
+                                </div>
+                            </div>
                             <div class="mb-4">
                                 <label for="senha" class="form-label">Senha</label>
                                 <div class="input-group">
@@ -79,12 +88,45 @@ if (localStorage.getItem('token')) {
     window.location.href = '/dashboard';
 }
 
+// Carrega cursos disponíveis
+document.addEventListener('DOMContentLoaded', async () => {
+    const selectCurso = document.getElementById('curso');
+
+    try {
+        const response = await fetch('/auth/cursos');
+        const cursos = await response.json();
+
+        if (cursos.length > 0) {
+            selectCurso.innerHTML = '<option value="">Selecione seu curso</option>';
+            cursos.forEach(curso => {
+                selectCurso.innerHTML += `<option value="${curso.id}" data-slug="${curso.slug}">${curso.nome}</option>`;
+            });
+        } else {
+            selectCurso.innerHTML = '<option value="">Nenhum curso disponível</option>';
+        }
+    } catch (error) {
+        selectCurso.innerHTML = '<option value="">Erro ao carregar cursos</option>';
+        console.error('Erro ao carregar cursos:', error);
+    }
+});
+
 async function handleCadastro(event) {
     event.preventDefault();
 
     const spinner = document.getElementById('cadastroSpinner');
     const btnText = document.getElementById('btnCadastroText');
     const alertBox = document.getElementById('alertBox');
+
+    const cursoSelect = document.getElementById('curso');
+    const cursoId = cursoSelect.value;
+    const cursoSlug = cursoSelect.options[cursoSelect.selectedIndex]?.dataset?.slug;
+
+    if (!cursoId) {
+        alertBox.className = 'alert alert-danger';
+        alertBox.textContent = 'Por favor, selecione um curso.';
+        alertBox.classList.remove('d-none');
+        return;
+    }
 
     spinner.classList.remove('d-none');
     btnText.textContent = 'Cadastrando...';
@@ -94,7 +136,8 @@ async function handleCadastro(event) {
         nome: document.getElementById('nome').value,
         email: document.getElementById('email').value,
         matricula: document.getElementById('matricula').value,
-        senha: document.getElementById('senha').value
+        senha: document.getElementById('senha').value,
+        curso_id: parseInt(cursoId)
     };
 
     try {
@@ -113,9 +156,13 @@ async function handleCadastro(event) {
             alertBox.textContent = 'Cadastro realizado com sucesso! Redirecionando...';
             alertBox.classList.remove('d-none');
 
-            // Redireciona para login após 2 segundos
+            // Redireciona para login do curso após 2 segundos
             setTimeout(() => {
-                window.location.href = '/login';
+                if (cursoSlug) {
+                    window.location.href = '/' + cursoSlug + '/login';
+                } else {
+                    window.location.href = '/login';
+                }
             }, 2000);
         } else {
             alertBox.className = 'alert alert-danger';

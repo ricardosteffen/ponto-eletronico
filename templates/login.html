@@ -28,13 +28,23 @@
                                            placeholder="seu@email.com">
                                 </div>
                             </div>
-                            <div class="mb-4">
+                            <div class="mb-3">
                                 <label for="senha" class="form-label">Senha</label>
                                 <div class="input-group">
                                     <span class="input-group-text"><i class="bi bi-lock"></i></span>
                                     <input type="password" class="form-control" id="senha" name="senha" required
                                            placeholder="Sua senha">
                                 </div>
+                            </div>
+                            <div class="mb-4">
+                                <label for="curso" class="form-label">Curso</label>
+                                <div class="input-group">
+                                    <span class="input-group-text"><i class="bi bi-book"></i></span>
+                                    <select class="form-select" id="curso" name="curso">
+                                        <option value="">Carregando cursos...</option>
+                                    </select>
+                                </div>
+                                <small class="text-muted">Super Admin: deixe em branco</small>
                             </div>
                             <button type="submit" class="btn btn-primary w-100 py-2" id="btnLogin">
                                 <span class="spinner-border spinner-border-sm d-none" id="loginSpinner"></span>
@@ -60,8 +70,31 @@
 <script>
 // Se já está logado, redireciona para dashboard
 if (localStorage.getItem('token')) {
-    window.location.href = '/dashboard';
+    const user = JSON.parse(localStorage.getItem('user') || '{}');
+    if (user.curso_slug) {
+        window.location.href = '/' + user.curso_slug + '/dashboard';
+    } else {
+        window.location.href = '/dashboard';
+    }
 }
+
+// Carrega cursos disponíveis
+document.addEventListener('DOMContentLoaded', async () => {
+    const selectCurso = document.getElementById('curso');
+
+    try {
+        const response = await fetch('/auth/cursos');
+        const cursos = await response.json();
+
+        selectCurso.innerHTML = '<option value="">Super Admin / Sem curso</option>';
+        cursos.forEach(curso => {
+            selectCurso.innerHTML += `<option value="${curso.id}" data-slug="${curso.slug}">${curso.nome}</option>`;
+        });
+    } catch (error) {
+        selectCurso.innerHTML = '<option value="">Erro ao carregar cursos</option>';
+        console.error('Erro ao carregar cursos:', error);
+    }
+});
 
 async function handleLogin(event) {
     event.preventDefault();
@@ -76,6 +109,9 @@ async function handleLogin(event) {
 
     const email = document.getElementById('email').value;
     const senha = document.getElementById('senha').value;
+    const cursoSelect = document.getElementById('curso');
+    const cursoId = cursoSelect.value ? parseInt(cursoSelect.value) : null;
+    const cursoSlug = cursoSelect.options[cursoSelect.selectedIndex]?.dataset?.slug;
 
     try {
         const response = await fetch('/auth/login', {
@@ -83,7 +119,7 @@ async function handleLogin(event) {
             headers: {
                 'Content-Type': 'application/json'
             },
-            body: JSON.stringify({ email, senha })
+            body: JSON.stringify({ email, senha, curso_id: cursoId })
         });
 
         const data = await response.json();
@@ -91,7 +127,17 @@ async function handleLogin(event) {
         if (response.ok) {
             localStorage.setItem('token', data.access_token);
             localStorage.setItem('user', JSON.stringify(data.user));
-            window.location.href = '/dashboard';
+
+            // Redireciona baseado no tipo de usuário
+            if (data.user.is_super_admin) {
+                window.location.href = '/super-admin';
+            } else if (data.user.is_admin && data.user.curso_slug) {
+                window.location.href = '/' + data.user.curso_slug + '/admin';
+            } else if (data.user.curso_slug) {
+                window.location.href = '/' + data.user.curso_slug + '/dashboard';
+            } else {
+                window.location.href = '/dashboard';
+            }
         } else {
             alertBox.className = 'alert alert-danger';
             alertBox.textContent = data.detail || 'Erro ao fazer login';
