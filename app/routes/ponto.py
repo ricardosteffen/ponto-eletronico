@@ -4,6 +4,7 @@ from sqlalchemy import func, and_
 from pydantic import BaseModel
 from typing import Optional, List
 from datetime import datetime, date, timedelta
+from app.models.models import BRAZIL_TZ
 import os
 import uuid
 from app.database import get_db
@@ -144,7 +145,7 @@ async def get_status_ponto(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    hoje = date.today()
+    hoje = datetime.now(BRAZIL_TZ).date()
     inicio_dia = datetime.combine(hoje, datetime.min.time())
     fim_dia = datetime.combine(hoje, datetime.max.time())
 
@@ -213,7 +214,7 @@ async def registrar_ponto(
 
     if foto:
         ext = os.path.splitext(foto.filename)[1] if foto.filename else '.jpg'
-        filename = f"{current_user.id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:8]}{ext}"
+        filename = f"{current_user.id}_{datetime.now(BRAZIL_TZ).strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:8]}{ext}"
         filepath = os.path.join(UPLOAD_FOLDER, filename)
 
         os.makedirs(UPLOAD_FOLDER, exist_ok=True)
@@ -262,9 +263,9 @@ async def get_historico(
     current_user: User = Depends(get_current_user)
 ):
     if not data_inicio:
-        data_inicio = date.today().replace(day=1)
+        data_inicio = datetime.now(BRAZIL_TZ).date().replace(day=1)
     if not data_fim:
-        data_fim = date.today()
+        data_fim = datetime.now(BRAZIL_TZ).date()
 
     inicio = datetime.combine(data_inicio, datetime.min.time())
     fim = datetime.combine(data_fim, datetime.max.time())

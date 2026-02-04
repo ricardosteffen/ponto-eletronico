@@ -7,7 +7,7 @@ from app.database import Base
 BRAZIL_TZ = timezone(timedelta(hours=-3))
 
 def now_brazil():
-    return datetime.now(BRAZIL_TZ)
+    return datetime.now(BRAZIL_TZ).replace(tzinfo=None)
 
 
 class Curso(Base):

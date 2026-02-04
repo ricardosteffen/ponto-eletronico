@@ -5,6 +5,7 @@ from sqlalchemy import and_, func
 from pydantic import BaseModel
 from typing import List, Optional
 from datetime import datetime, date, timedelta
+from app.models.models import BRAZIL_TZ
 import csv
 import io
 import os
@@ -177,9 +178,9 @@ async def get_relatorio(
     current_admin: User = Depends(get_current_admin)
 ):
     if not data_inicio:
-        data_inicio = date.today().replace(day=1)
+        data_inicio = datetime.now(BRAZIL_TZ).date().replace(day=1)
     if not data_fim:
-        data_fim = date.today()
+        data_fim = datetime.now(BRAZIL_TZ).date()
 
     inicio = datetime.combine(data_inicio, datetime.min.time())
     fim = datetime.combine(data_fim, datetime.max.time())
@@ -232,9 +233,9 @@ async def get_relatorio_resumo(
     current_admin: User = Depends(get_current_admin)
 ):
     if not data_inicio:
-        data_inicio = date.today().replace(day=1)
+        data_inicio = datetime.now(BRAZIL_TZ).date().replace(day=1)
     if not data_fim:
-        data_fim = date.today()
+        data_fim = datetime.now(BRAZIL_TZ).date()
 
     inicio = datetime.combine(data_inicio, datetime.min.time())
     fim = datetime.combine(data_fim, datetime.max.time())
@@ -285,9 +286,9 @@ async def export_relatorio(
     current_admin: User = Depends(get_current_admin)
 ):
     if not data_inicio:
-        data_inicio = date.today().replace(day=1)
+        data_inicio = datetime.now(BRAZIL_TZ).date().replace(day=1)
     if not data_fim:
-        data_fim = date.today()
+        data_fim = datetime.now(BRAZIL_TZ).date()
 
     inicio = datetime.combine(data_inicio, datetime.min.time())
     fim = datetime.combine(data_fim, datetime.max.time())
@@ -417,9 +418,9 @@ async def export_relatorio_pdf(
 ):
     """Exporta relatório em formato PDF."""
     if not data_inicio:
-        data_inicio = date.today().replace(day=1)
+        data_inicio = datetime.now(BRAZIL_TZ).date().replace(day=1)
     if not data_fim:
-        data_fim = date.today()
+        data_fim = datetime.now(BRAZIL_TZ).date()
 
     inicio = datetime.combine(data_inicio, datetime.min.time())
     fim = datetime.combine(data_fim, datetime.max.time())
