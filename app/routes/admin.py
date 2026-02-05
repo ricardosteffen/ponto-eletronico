@@ -589,6 +589,7 @@ class LocationCreate(BaseModel):
     latitude: float
     longitude: float
     raio_metros: int = 100
+    curso_id: Optional[int] = None  # Super admin pode especificar o curso
 
 
 class LocationUpdate(BaseModel):
@@ -606,6 +607,9 @@ class LocationResponse(BaseModel):
     longitude: float
     raio_metros: int
     ativo: bool
+    curso_id: Optional[int] = None
+    curso_nome: Optional[str] = None
+    total_alunos: int = 0
 
     class Config:
         from_attributes = True
@@ -622,7 +626,39 @@ async def list_locations(
     if not current_admin.is_super_admin and current_admin.curso_id:
         query = query.filter(Location.curso_id == current_admin.curso_id)
     locations = query.order_by(Location.nome).all()
-    return [LocationResponse.model_validate(loc) for loc in locations]
+
+    # Cache de cursos
+    cursos_cache = {}
+
+    result = []
+    for loc in locations:
+        curso_nome = None
+        total_alunos = 0
+
+        if loc.curso_id:
+            if loc.curso_id not in cursos_cache:
+                curso = db.query(Curso).filter(Curso.id == loc.curso_id).first()
+                alunos_count = db.query(User).filter(User.curso_id == loc.curso_id).count()
+                cursos_cache[loc.curso_id] = {
+                    'nome': curso.nome if curso else None,
+                    'total_alunos': alunos_count
+                }
+            curso_nome = cursos_cache[loc.curso_id]['nome']
+            total_alunos = cursos_cache[loc.curso_id]['total_alunos']
+
+        result.append(LocationResponse(
+            id=loc.id,
+            nome=loc.nome,
+            latitude=loc.latitude,
+            longitude=loc.longitude,
+            raio_metros=loc.raio_metros,
+            ativo=loc.ativo,
+            curso_id=loc.curso_id,
+            curso_nome=curso_nome,
+            total_alunos=total_alunos
+        ))
+
+    return result
 
 
 @router.post("/locations", response_model=LocationResponse)
@@ -632,8 +668,18 @@ async def create_location(
     current_admin: User = Depends(get_current_admin)
 ):
     """Cria um novo local para o curso do admin."""
-    # Define o curso_id baseado no admin (super admin pode não ter curso)
-    curso_id = current_admin.curso_id
+    # Super admin pode especificar o curso, admin comum usa o próprio curso
+    if current_admin.is_super_admin and location_data.curso_id:
+        curso_id = location_data.curso_id
+        # Valida se o curso existe
+        curso = db.query(Curso).filter(Curso.id == curso_id).first()
+        if not curso:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Curso não encontrado"
+            )
+    else:
+        curso_id = current_admin.curso_id
 
     location = Location(
         nome=location_data.nome,
@@ -645,7 +691,27 @@ async def create_location(
     db.add(location)
     db.commit()
     db.refresh(location)
-    return LocationResponse.model_validate(location)
+
+    # Busca informações do curso
+    curso_nome = None
+    total_alunos = 0
+    if curso_id:
+        curso = db.query(Curso).filter(Curso.id == curso_id).first()
+        if curso:
+            curso_nome = curso.nome
+            total_alunos = db.query(User).filter(User.curso_id == curso_id).count()
+
+    return LocationResponse(
+        id=location.id,
+        nome=location.nome,
+        latitude=location.latitude,
+        longitude=location.longitude,
+        raio_metros=location.raio_metros,
+        ativo=location.ativo,
+        curso_id=location.curso_id,
+        curso_nome=curso_nome,
+        total_alunos=total_alunos
+    )
 
 
 @router.put("/locations/{location_id}", response_model=LocationResponse)

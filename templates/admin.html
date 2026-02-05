@@ -226,6 +226,13 @@
                         </div>
                         <div class="card-body">
                             <form id="formNovoLocal" onsubmit="cadastrarLocal(event)">
+                                <div class="mb-3" id="selectCursoLocal" style="display: none;">
+                                    <label class="form-label">Curso</label>
+                                    <select class="form-select" id="localCurso">
+                                        <option value="">Selecione um curso</option>
+                                    </select>
+                                    <small class="text-muted">Apenas alunos deste curso poderão registrar presença neste local</small>
+                                </div>
                                 <div class="mb-3">
                                     <label class="form-label">Nome do Local</label>
                                     <input type="text" class="form-control" id="localNome" required placeholder="Ex: Campus PUC, Hospital, etc.">
@@ -267,6 +274,8 @@
                                     <thead>
                                         <tr>
                                             <th>Nome</th>
+                                            <th>Curso</th>
+                                            <th>Alunos</th>
                                             <th>Coordenadas</th>
                                             <th>Raio</th>
                                             <th>Status</th>
@@ -274,7 +283,7 @@
                                         </tr>
                                     </thead>
                                     <tbody id="tabelaLocais">
-                                        <tr><td colspan="5" class="text-center">Carregando...</td></tr>
+                                        <tr><td colspan="7" class="text-center">Carregando...</td></tr>
                                     </tbody>
                                 </table>
                             </div>
@@ -760,8 +769,33 @@ async function confirmarDeletar() {
 
 // ============= LOCAIS =============
 
+// Carregar cursos para o select (apenas super admin)
+async function carregarCursosParaLocal() {
+    if (!currentUser.is_super_admin) return;
+
+    // Mostra o select de curso
+    document.getElementById('selectCursoLocal').style.display = 'block';
+
+    try {
+        const response = await fetchWithAuth('/auth/cursos');
+        if (!response) return;
+        const cursos = await response.json();
+
+        const select = document.getElementById('localCurso');
+        select.innerHTML = '<option value="">Selecione um curso</option>';
+        cursos.forEach(c => {
+            select.innerHTML += `<option value="${c.id}">${c.nome}</option>`;
+        });
+    } catch (error) {
+        console.error('Erro ao carregar cursos:', error);
+    }
+}
+
 // Carregar locais
 async function carregarLocais() {
+    // Carrega cursos para o select se for super admin
+    carregarCursosParaLocal();
+
     try {
         const response = await fetchWithAuth('/admin/locations');
         if (!response) return;
@@ -772,6 +806,8 @@ async function carregarLocais() {
             tbody.innerHTML = locations.map(loc => `
                 <tr>
                     <td><strong>${loc.nome}</strong></td>
+                    <td>${loc.curso_nome ? `<span class="badge bg-info">${loc.curso_nome}</span>` : '<span class="text-muted">-</span>'}</td>
+                    <td><span class="badge bg-secondary">${loc.total_alunos}</span></td>
                     <td><small>${loc.latitude.toFixed(6)}, ${loc.longitude.toFixed(6)}</small></td>
                     <td>${loc.raio_metros}m</td>
                     <td>${loc.ativo ?
@@ -788,7 +824,7 @@ async function carregarLocais() {
                 </tr>
             `).join('');
         } else {
-            tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted">Nenhum local cadastrado. Adicione pelo menos um local para habilitar o registro de presença por geolocalização.</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted">Nenhum local cadastrado. Adicione pelo menos um local para habilitar o registro de presença por geolocalização.</td></tr>';
         }
     } catch (error) {
         console.error('Erro ao carregar locais:', error);
@@ -821,6 +857,14 @@ async function cadastrarLocal(event) {
         longitude: parseFloat(document.getElementById('localLongitude').value),
         raio_metros: parseInt(document.getElementById('localRaio').value)
     };
+
+    // Se for super admin, adiciona o curso_id selecionado
+    if (currentUser.is_super_admin) {
+        const cursoId = document.getElementById('localCurso').value;
+        if (cursoId) {
+            dados.curso_id = parseInt(cursoId);
+        }
+    }
 
     try {
         const response = await fetchWithAuth('/admin/locations', {
