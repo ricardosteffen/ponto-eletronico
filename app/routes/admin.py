@@ -584,12 +584,24 @@ async def export_relatorio_pdf(
 
 # ============= LOCAIS =============
 
+class CursoSimples(BaseModel):
+    id: int
+    nome: str
+
+class AlunoSimples(BaseModel):
+    id: int
+    nome: str
+    matricula: str
+
 class LocationCreate(BaseModel):
     nome: str
     latitude: float
     longitude: float
     raio_metros: int = 100
-    curso_id: Optional[int] = None  # Super admin pode especificar o curso
+    todos_cursos: bool = False
+    cursos_ids: List[int] = []  # IDs dos cursos associados
+    todos_alunos: bool = True
+    usuarios_ids: List[int] = []  # IDs dos alunos específicos (se todos_alunos=False)
 
 
 class LocationUpdate(BaseModel):
@@ -598,6 +610,10 @@ class LocationUpdate(BaseModel):
     longitude: Optional[float] = None
     raio_metros: Optional[int] = None
     ativo: Optional[bool] = None
+    todos_cursos: Optional[bool] = None
+    cursos_ids: Optional[List[int]] = None
+    todos_alunos: Optional[bool] = None
+    usuarios_ids: Optional[List[int]] = None
 
 
 class LocationResponse(BaseModel):
@@ -607,8 +623,10 @@ class LocationResponse(BaseModel):
     longitude: float
     raio_metros: int
     ativo: bool
-    curso_id: Optional[int] = None
-    curso_nome: Optional[str] = None
+    todos_cursos: bool = False
+    cursos: List[CursoSimples] = []
+    todos_alunos: bool = True
+    usuarios_especificos: List[AlunoSimples] = []
     total_alunos: int = 0
 
     class Config:
@@ -624,27 +642,50 @@ async def list_locations(
     query = db.query(Location)
     # Filtra por curso se não for super admin
     if not current_admin.is_super_admin and current_admin.curso_id:
-        query = query.filter(Location.curso_id == current_admin.curso_id)
+        # Mostra locais do curso do admin OU locais para todos os cursos
+        from sqlalchemy import or_
+        from app.models.models import location_cursos
+        # Locais com todos_cursos=True OU locais associados ao curso do admin
+        subquery = db.query(location_cursos.c.location_id).filter(
+            location_cursos.c.curso_id == current_admin.curso_id
+        )
+        query = query.filter(
+            or_(
+                Location.todos_cursos == True,
+                Location.id.in_(subquery),
+                Location.curso_id == current_admin.curso_id  # Legado
+            )
+        )
     locations = query.order_by(Location.nome).all()
-
-    # Cache de cursos
-    cursos_cache = {}
 
     result = []
     for loc in locations:
-        curso_nome = None
-        total_alunos = 0
+        # Busca cursos associados
+        cursos_list = [CursoSimples(id=c.id, nome=c.nome) for c in loc.cursos]
 
-        if loc.curso_id:
-            if loc.curso_id not in cursos_cache:
-                curso = db.query(Curso).filter(Curso.id == loc.curso_id).first()
-                alunos_count = db.query(User).filter(User.curso_id == loc.curso_id).count()
-                cursos_cache[loc.curso_id] = {
-                    'nome': curso.nome if curso else None,
-                    'total_alunos': alunos_count
-                }
-            curso_nome = cursos_cache[loc.curso_id]['nome']
-            total_alunos = cursos_cache[loc.curso_id]['total_alunos']
+        # Se não tem cursos na nova tabela, usa o legado
+        if not cursos_list and loc.curso_id:
+            curso_legado = db.query(Curso).filter(Curso.id == loc.curso_id).first()
+            if curso_legado:
+                cursos_list = [CursoSimples(id=curso_legado.id, nome=curso_legado.nome)]
+
+        # Busca alunos específicos
+        usuarios_list = [AlunoSimples(id=u.id, nome=u.nome, matricula=u.matricula)
+                        for u in loc.usuarios_especificos]
+
+        # Calcula total de alunos que podem usar este local
+        total_alunos = 0
+        if loc.todos_cursos:
+            total_alunos = db.query(User).filter(User.is_super_admin == False).count()
+        elif loc.todos_alunos:
+            # Conta alunos dos cursos associados
+            cursos_ids = [c.id for c in loc.cursos]
+            if not cursos_ids and loc.curso_id:
+                cursos_ids = [loc.curso_id]
+            if cursos_ids:
+                total_alunos = db.query(User).filter(User.curso_id.in_(cursos_ids)).count()
+        else:
+            total_alunos = len(loc.usuarios_especificos)
 
         result.append(LocationResponse(
             id=loc.id,
@@ -653,8 +694,10 @@ async def list_locations(
             longitude=loc.longitude,
             raio_metros=loc.raio_metros,
             ativo=loc.ativo,
-            curso_id=loc.curso_id,
-            curso_nome=curso_nome,
+            todos_cursos=loc.todos_cursos or False,
+            cursos=cursos_list,
+            todos_alunos=loc.todos_alunos if loc.todos_alunos is not None else True,
+            usuarios_especificos=usuarios_list,
             total_alunos=total_alunos
         ))
 
@@ -667,39 +710,52 @@ async def create_location(
     db: Session = Depends(get_db),
     current_admin: User = Depends(get_current_admin)
 ):
-    """Cria um novo local para o curso do admin."""
-    # Super admin pode especificar o curso, admin comum usa o próprio curso
-    if current_admin.is_super_admin and location_data.curso_id:
-        curso_id = location_data.curso_id
-        # Valida se o curso existe
-        curso = db.query(Curso).filter(Curso.id == curso_id).first()
-        if not curso:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Curso não encontrado"
-            )
-    else:
-        curso_id = current_admin.curso_id
-
+    """Cria um novo local."""
     location = Location(
         nome=location_data.nome,
         latitude=location_data.latitude,
         longitude=location_data.longitude,
         raio_metros=location_data.raio_metros,
-        curso_id=curso_id
+        todos_cursos=location_data.todos_cursos,
+        todos_alunos=location_data.todos_alunos
     )
     db.add(location)
+    db.flush()  # Para obter o ID
+
+    # Associa cursos
+    if not location_data.todos_cursos:
+        if location_data.cursos_ids:
+            cursos = db.query(Curso).filter(Curso.id.in_(location_data.cursos_ids)).all()
+            location.cursos = cursos
+        elif not current_admin.is_super_admin and current_admin.curso_id:
+            # Admin comum: associa ao próprio curso
+            curso = db.query(Curso).filter(Curso.id == current_admin.curso_id).first()
+            if curso:
+                location.cursos = [curso]
+
+    # Associa alunos específicos (se não for todos_alunos)
+    if not location_data.todos_alunos and location_data.usuarios_ids:
+        usuarios = db.query(User).filter(User.id.in_(location_data.usuarios_ids)).all()
+        location.usuarios_especificos = usuarios
+
     db.commit()
     db.refresh(location)
 
-    # Busca informações do curso
-    curso_nome = None
+    # Prepara resposta
+    cursos_list = [CursoSimples(id=c.id, nome=c.nome) for c in location.cursos]
+    usuarios_list = [AlunoSimples(id=u.id, nome=u.nome, matricula=u.matricula)
+                    for u in location.usuarios_especificos]
+
+    # Calcula total de alunos
     total_alunos = 0
-    if curso_id:
-        curso = db.query(Curso).filter(Curso.id == curso_id).first()
-        if curso:
-            curso_nome = curso.nome
-            total_alunos = db.query(User).filter(User.curso_id == curso_id).count()
+    if location.todos_cursos:
+        total_alunos = db.query(User).filter(User.is_super_admin == False).count()
+    elif location.todos_alunos:
+        cursos_ids = [c.id for c in location.cursos]
+        if cursos_ids:
+            total_alunos = db.query(User).filter(User.curso_id.in_(cursos_ids)).count()
+    else:
+        total_alunos = len(location.usuarios_especificos)
 
     return LocationResponse(
         id=location.id,
@@ -708,8 +764,10 @@ async def create_location(
         longitude=location.longitude,
         raio_metros=location.raio_metros,
         ativo=location.ativo,
-        curso_id=location.curso_id,
-        curso_nome=curso_nome,
+        todos_cursos=location.todos_cursos or False,
+        cursos=cursos_list,
+        todos_alunos=location.todos_alunos if location.todos_alunos is not None else True,
+        usuarios_especificos=usuarios_list,
         total_alunos=total_alunos
     )
 
@@ -729,13 +787,25 @@ async def update_location(
             detail="Local não encontrado"
         )
 
-    # Verifica permissão do admin no curso do local
-    if not current_admin.is_super_admin and location.curso_id != current_admin.curso_id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Você não tem permissão para modificar este local"
+    # Verifica permissão do admin
+    if not current_admin.is_super_admin:
+        # Admin comum: verifica se tem acesso ao local
+        from app.models.models import location_cursos
+        has_access = (
+            location.todos_cursos or
+            location.curso_id == current_admin.curso_id or
+            db.query(location_cursos).filter(
+                location_cursos.c.location_id == location_id,
+                location_cursos.c.curso_id == current_admin.curso_id
+            ).first() is not None
         )
+        if not has_access:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Você não tem permissão para modificar este local"
+            )
 
+    # Atualiza campos básicos
     if location_data.nome is not None:
         location.nome = location_data.nome
     if location_data.latitude is not None:
@@ -747,9 +817,73 @@ async def update_location(
     if location_data.ativo is not None:
         location.ativo = location_data.ativo
 
+    # Atualiza configuração de cursos
+    if location_data.todos_cursos is not None:
+        location.todos_cursos = location_data.todos_cursos
+
+    # Atualiza cursos associados
+    if location_data.cursos_ids is not None:
+        if location_data.todos_cursos:
+            # Se todos_cursos, limpa a lista
+            location.cursos = []
+        else:
+            cursos = db.query(Curso).filter(Curso.id.in_(location_data.cursos_ids)).all()
+            location.cursos = cursos
+
+    # Atualiza configuração de alunos
+    if location_data.todos_alunos is not None:
+        location.todos_alunos = location_data.todos_alunos
+
+    # Atualiza alunos específicos
+    if location_data.usuarios_ids is not None:
+        if location_data.todos_alunos:
+            # Se todos_alunos, limpa a lista
+            location.usuarios_especificos = []
+        else:
+            usuarios = db.query(User).filter(User.id.in_(location_data.usuarios_ids)).all()
+            location.usuarios_especificos = usuarios
+
     db.commit()
     db.refresh(location)
-    return LocationResponse.model_validate(location)
+
+    # Prepara resposta
+    cursos_list = [CursoSimples(id=c.id, nome=c.nome) for c in location.cursos]
+
+    # Se não tem cursos na nova tabela, usa o legado
+    if not cursos_list and location.curso_id:
+        curso_legado = db.query(Curso).filter(Curso.id == location.curso_id).first()
+        if curso_legado:
+            cursos_list = [CursoSimples(id=curso_legado.id, nome=curso_legado.nome)]
+
+    usuarios_list = [AlunoSimples(id=u.id, nome=u.nome, matricula=u.matricula)
+                    for u in location.usuarios_especificos]
+
+    # Calcula total de alunos
+    total_alunos = 0
+    if location.todos_cursos:
+        total_alunos = db.query(User).filter(User.is_super_admin == False).count()
+    elif location.todos_alunos:
+        cursos_ids = [c.id for c in location.cursos]
+        if not cursos_ids and location.curso_id:
+            cursos_ids = [location.curso_id]
+        if cursos_ids:
+            total_alunos = db.query(User).filter(User.curso_id.in_(cursos_ids)).count()
+    else:
+        total_alunos = len(location.usuarios_especificos)
+
+    return LocationResponse(
+        id=location.id,
+        nome=location.nome,
+        latitude=location.latitude,
+        longitude=location.longitude,
+        raio_metros=location.raio_metros,
+        ativo=location.ativo,
+        todos_cursos=location.todos_cursos or False,
+        cursos=cursos_list,
+        todos_alunos=location.todos_alunos if location.todos_alunos is not None else True,
+        usuarios_especificos=usuarios_list,
+        total_alunos=total_alunos
+    )
 
 
 @router.delete("/locations/{location_id}")

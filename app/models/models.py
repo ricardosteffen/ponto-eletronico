@@ -1,7 +1,23 @@
-from sqlalchemy import Column, Integer, String, Boolean, Float, DateTime, ForeignKey, Text, UniqueConstraint
+from sqlalchemy import Column, Integer, String, Boolean, Float, DateTime, ForeignKey, Text, UniqueConstraint, Table
 from sqlalchemy.orm import relationship
 from datetime import datetime, timezone, timedelta
 from app.database import Base
+
+# Tabela de relacionamento muitos-para-muitos: Location <-> Curso
+location_cursos = Table(
+    'location_cursos',
+    Base.metadata,
+    Column('location_id', Integer, ForeignKey('locations.id', ondelete='CASCADE'), primary_key=True),
+    Column('curso_id', Integer, ForeignKey('cursos.id', ondelete='CASCADE'), primary_key=True)
+)
+
+# Tabela de relacionamento muitos-para-muitos: Location <-> User (alunos específicos)
+location_users = Table(
+    'location_users',
+    Base.metadata,
+    Column('location_id', Integer, ForeignKey('locations.id', ondelete='CASCADE'), primary_key=True),
+    Column('user_id', Integer, ForeignKey('users.id', ondelete='CASCADE'), primary_key=True)
+)
 
 # Timezone Brasil (UTC-3)
 BRAZIL_TZ = timezone(timedelta(hours=-3))
@@ -90,8 +106,15 @@ class Location(Base):
     longitude = Column(Float, nullable=False)
     raio_metros = Column(Integer, default=100)
     ativo = Column(Boolean, default=True)
-    curso_id = Column(Integer, ForeignKey("cursos.id"), nullable=True)  # Cada local pertence a um curso
+    curso_id = Column(Integer, ForeignKey("cursos.id"), nullable=True)  # Curso principal (legado)
+    todos_cursos = Column(Boolean, default=False)  # Se True, válido para todos os cursos
+    todos_alunos = Column(Boolean, default=True)  # Se True, válido para todos os alunos dos cursos
     created_at = Column(DateTime, default=now_brazil)
     updated_at = Column(DateTime, default=now_brazil, onupdate=now_brazil)
 
+    # Relacionamento legado (mantido para compatibilidade)
     curso = relationship("Curso", back_populates="locais")
+
+    # Novos relacionamentos muitos-para-muitos
+    cursos = relationship("Curso", secondary=location_cursos, backref="locations_multi")
+    usuarios_especificos = relationship("User", secondary=location_users, backref="locations_especificos")

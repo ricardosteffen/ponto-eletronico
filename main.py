@@ -77,6 +77,72 @@ def run_migrations():
                 conn.commit()
                 print("Coluna curso_id adicionada em locations!")
 
+            if 'todos_cursos' not in location_columns:
+                print("Adicionando coluna todos_cursos em locations...")
+                if is_postgres:
+                    conn.execute(text("ALTER TABLE locations ADD COLUMN todos_cursos BOOLEAN DEFAULT false"))
+                else:
+                    conn.execute(text("ALTER TABLE locations ADD COLUMN todos_cursos BOOLEAN DEFAULT 0"))
+                conn.commit()
+                print("Coluna todos_cursos adicionada!")
+
+            if 'todos_alunos' not in location_columns:
+                print("Adicionando coluna todos_alunos em locations...")
+                if is_postgres:
+                    conn.execute(text("ALTER TABLE locations ADD COLUMN todos_alunos BOOLEAN DEFAULT true"))
+                else:
+                    conn.execute(text("ALTER TABLE locations ADD COLUMN todos_alunos BOOLEAN DEFAULT 1"))
+                conn.commit()
+                print("Coluna todos_alunos adicionada!")
+
+        # Cria tabela location_cursos se não existir
+        if not inspector.has_table('location_cursos'):
+            print("Criando tabela location_cursos...")
+            if is_postgres:
+                conn.execute(text("""
+                    CREATE TABLE location_cursos (
+                        location_id INTEGER REFERENCES locations(id) ON DELETE CASCADE,
+                        curso_id INTEGER REFERENCES cursos(id) ON DELETE CASCADE,
+                        PRIMARY KEY (location_id, curso_id)
+                    )
+                """))
+            else:
+                conn.execute(text("""
+                    CREATE TABLE location_cursos (
+                        location_id INTEGER,
+                        curso_id INTEGER,
+                        PRIMARY KEY (location_id, curso_id),
+                        FOREIGN KEY (location_id) REFERENCES locations(id) ON DELETE CASCADE,
+                        FOREIGN KEY (curso_id) REFERENCES cursos(id) ON DELETE CASCADE
+                    )
+                """))
+            conn.commit()
+            print("Tabela location_cursos criada!")
+
+        # Cria tabela location_users se não existir
+        if not inspector.has_table('location_users'):
+            print("Criando tabela location_users...")
+            if is_postgres:
+                conn.execute(text("""
+                    CREATE TABLE location_users (
+                        location_id INTEGER REFERENCES locations(id) ON DELETE CASCADE,
+                        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+                        PRIMARY KEY (location_id, user_id)
+                    )
+                """))
+            else:
+                conn.execute(text("""
+                    CREATE TABLE location_users (
+                        location_id INTEGER,
+                        user_id INTEGER,
+                        PRIMARY KEY (location_id, user_id),
+                        FOREIGN KEY (location_id) REFERENCES locations(id) ON DELETE CASCADE,
+                        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+                    )
+                """))
+            conn.commit()
+            print("Tabela location_users criada!")
+
     print("Migrações concluídas!")
 
 

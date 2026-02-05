@@ -226,13 +226,6 @@
                         </div>
                         <div class="card-body">
                             <form id="formNovoLocal" onsubmit="cadastrarLocal(event)">
-                                <div class="mb-3" id="selectCursoLocal" style="display: none;">
-                                    <label class="form-label">Curso</label>
-                                    <select class="form-select" id="localCurso">
-                                        <option value="">Selecione um curso</option>
-                                    </select>
-                                    <small class="text-muted">Apenas alunos deste curso poderão registrar presença neste local</small>
-                                </div>
                                 <div class="mb-3">
                                     <label class="form-label">Nome do Local</label>
                                     <input type="text" class="form-control" id="localNome" required placeholder="Ex: Campus PUC, Hospital, etc.">
@@ -252,6 +245,39 @@
                                 <button type="button" class="btn btn-outline-secondary mb-3 w-100" onclick="obterLocalizacaoLocal()">
                                     <i class="bi bi-geo-alt"></i> Usar minha localização
                                 </button>
+
+                                <!-- Configuração de Cursos (apenas super admin) -->
+                                <div id="configCursosLocal" style="display: none;">
+                                    <hr>
+                                    <h6 class="mb-3"><i class="bi bi-book"></i> Cursos</h6>
+                                    <div class="mb-3 form-check">
+                                        <input type="checkbox" class="form-check-input" id="localTodosCursos" onchange="toggleTodosCursos()">
+                                        <label class="form-check-label" for="localTodosCursos">Disponível para todos os cursos</label>
+                                    </div>
+                                    <div id="selectCursosLocal" class="mb-3">
+                                        <label class="form-label">Selecione os cursos</label>
+                                        <div id="checkboxCursos" class="border rounded p-2" style="max-height: 150px; overflow-y: auto;">
+                                            <!-- Checkboxes de cursos serão inseridos aqui -->
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Configuração de Alunos (apenas super admin) -->
+                                <div id="configAlunosLocal" style="display: none;">
+                                    <hr>
+                                    <h6 class="mb-3"><i class="bi bi-people"></i> Alunos</h6>
+                                    <div class="mb-3 form-check">
+                                        <input type="checkbox" class="form-check-input" id="localTodosAlunos" checked onchange="toggleTodosAlunos()">
+                                        <label class="form-check-label" for="localTodosAlunos">Disponível para todos os alunos dos cursos selecionados</label>
+                                    </div>
+                                    <div id="selectAlunosLocal" class="mb-3" style="display: none;">
+                                        <label class="form-label">Selecione os alunos específicos</label>
+                                        <div id="checkboxAlunos" class="border rounded p-2" style="max-height: 200px; overflow-y: auto;">
+                                            <!-- Checkboxes de alunos serão inseridos aqui -->
+                                        </div>
+                                    </div>
+                                </div>
+
                                 <button type="submit" class="btn btn-primary w-100">
                                     <i class="bi bi-plus-circle"></i> Adicionar Local
                                 </button>
@@ -274,7 +300,7 @@
                                     <thead>
                                         <tr>
                                             <th>Nome</th>
-                                            <th>Curso</th>
+                                            <th>Cursos</th>
                                             <th>Alunos</th>
                                             <th>Coordenadas</th>
                                             <th>Raio</th>
@@ -377,6 +403,89 @@
                     <p class="mb-1"><strong id="fotoAluno"></strong></p>
                     <p class="text-muted mb-0" id="fotoDataHora"></p>
                 </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Editar Local -->
+<div class="modal fade" id="modalEditarLocal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title"><i class="bi bi-pencil"></i> Editar Local</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="formEditarLocal">
+                    <input type="hidden" id="editLocalId">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label class="form-label">Nome do Local</label>
+                                <input type="text" class="form-control" id="editLocalNome" required>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label class="form-label">Raio (metros)</label>
+                                <input type="number" class="form-control" id="editLocalRaio" required min="10" max="5000">
+                            </div>
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label class="form-label">Latitude</label>
+                                <input type="number" step="any" class="form-control" id="editLocalLatitude" required>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label class="form-label">Longitude</label>
+                                <input type="number" step="any" class="form-control" id="editLocalLongitude" required>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Configuração de Cursos -->
+                    <div id="editConfigCursosLocal">
+                        <hr>
+                        <h6 class="mb-3"><i class="bi bi-book"></i> Cursos</h6>
+                        <div class="mb-3 form-check">
+                            <input type="checkbox" class="form-check-input" id="editLocalTodosCursos" onchange="toggleEditTodosCursos()">
+                            <label class="form-check-label" for="editLocalTodosCursos">Disponível para todos os cursos</label>
+                        </div>
+                        <div id="editSelectCursosLocal" class="mb-3">
+                            <label class="form-label">Selecione os cursos</label>
+                            <div id="editCheckboxCursos" class="border rounded p-2" style="max-height: 150px; overflow-y: auto;">
+                                <!-- Checkboxes de cursos serão inseridos aqui -->
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Configuração de Alunos -->
+                    <div id="editConfigAlunosLocal">
+                        <hr>
+                        <h6 class="mb-3"><i class="bi bi-people"></i> Alunos</h6>
+                        <div class="mb-3 form-check">
+                            <input type="checkbox" class="form-check-input" id="editLocalTodosAlunos" checked onchange="toggleEditTodosAlunos()">
+                            <label class="form-check-label" for="editLocalTodosAlunos">Disponível para todos os alunos dos cursos selecionados</label>
+                        </div>
+                        <div id="editSelectAlunosLocal" class="mb-3" style="display: none;">
+                            <label class="form-label">Selecione os alunos específicos</label>
+                            <div id="editCheckboxAlunos" class="border rounded p-2" style="max-height: 200px; overflow-y: auto;">
+                                <!-- Checkboxes de alunos serão inseridos aqui -->
+                            </div>
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-primary" onclick="salvarEdicaoLocal()">
+                    <i class="bi bi-check-circle"></i> Salvar Alterações
+                </button>
             </div>
         </div>
     </div>
@@ -769,26 +878,86 @@ async function confirmarDeletar() {
 
 // ============= LOCAIS =============
 
-// Carregar cursos para o select (apenas super admin)
+// Cache de dados para locais
+let cursosDisponiveis = [];
+let alunosDisponiveis = [];
+let locaisCache = [];
+
+// Carregar cursos e configurar formulário (apenas super admin)
 async function carregarCursosParaLocal() {
     if (!currentUser.is_super_admin) return;
 
-    // Mostra o select de curso
-    document.getElementById('selectCursoLocal').style.display = 'block';
+    // Mostra configurações avançadas
+    document.getElementById('configCursosLocal').style.display = 'block';
+    document.getElementById('configAlunosLocal').style.display = 'block';
 
     try {
         const response = await fetchWithAuth('/auth/cursos');
         if (!response) return;
-        const cursos = await response.json();
+        cursosDisponiveis = await response.json();
 
-        const select = document.getElementById('localCurso');
-        select.innerHTML = '<option value="">Selecione um curso</option>';
-        cursos.forEach(c => {
-            select.innerHTML += `<option value="${c.id}">${c.nome}</option>`;
-        });
+        // Preenche checkboxes de cursos (criar)
+        const container = document.getElementById('checkboxCursos');
+        container.innerHTML = cursosDisponiveis.map(c => `
+            <div class="form-check">
+                <input class="form-check-input curso-checkbox" type="checkbox" value="${c.id}" id="curso_${c.id}" onchange="atualizarAlunosPorCurso()">
+                <label class="form-check-label" for="curso_${c.id}">${c.nome}</label>
+            </div>
+        `).join('');
+
+        // Carrega alunos
+        await carregarAlunosParaLocal();
     } catch (error) {
         console.error('Erro ao carregar cursos:', error);
     }
+}
+
+// Carregar alunos para checkbox
+async function carregarAlunosParaLocal() {
+    try {
+        const response = await fetchWithAuth('/admin/users');
+        if (!response) return;
+        alunosDisponiveis = await response.json();
+        atualizarAlunosPorCurso();
+    } catch (error) {
+        console.error('Erro ao carregar alunos:', error);
+    }
+}
+
+// Atualizar lista de alunos baseado nos cursos selecionados
+function atualizarAlunosPorCurso() {
+    const cursosSelecionados = Array.from(document.querySelectorAll('.curso-checkbox:checked')).map(cb => parseInt(cb.value));
+    const todosCursos = document.getElementById('localTodosCursos').checked;
+
+    let alunosFiltrados = alunosDisponiveis;
+    if (!todosCursos && cursosSelecionados.length > 0) {
+        alunosFiltrados = alunosDisponiveis.filter(a => cursosSelecionados.includes(a.curso_id));
+    }
+
+    const container = document.getElementById('checkboxAlunos');
+    if (alunosFiltrados.length > 0) {
+        container.innerHTML = alunosFiltrados.map(a => `
+            <div class="form-check">
+                <input class="form-check-input aluno-checkbox" type="checkbox" value="${a.id}" id="aluno_${a.id}">
+                <label class="form-check-label" for="aluno_${a.id}">${a.nome} (${a.matricula})${a.curso_nome ? ' - ' + a.curso_nome : ''}</label>
+            </div>
+        `).join('');
+    } else {
+        container.innerHTML = '<p class="text-muted mb-0">Selecione pelo menos um curso</p>';
+    }
+}
+
+// Toggle todos os cursos (criar)
+function toggleTodosCursos() {
+    const todosCursos = document.getElementById('localTodosCursos').checked;
+    document.getElementById('selectCursosLocal').style.display = todosCursos ? 'none' : 'block';
+    atualizarAlunosPorCurso();
+}
+
+// Toggle todos os alunos (criar)
+function toggleTodosAlunos() {
+    const todosAlunos = document.getElementById('localTodosAlunos').checked;
+    document.getElementById('selectAlunosLocal').style.display = todosAlunos ? 'none' : 'block';
 }
 
 // Carregar locais
@@ -799,21 +968,46 @@ async function carregarLocais() {
     try {
         const response = await fetchWithAuth('/admin/locations');
         if (!response) return;
-        const locations = await response.json();
+        locaisCache = await response.json();
 
         const tbody = document.getElementById('tabelaLocais');
-        if (locations.length > 0) {
-            tbody.innerHTML = locations.map(loc => `
+        if (locaisCache.length > 0) {
+            tbody.innerHTML = locaisCache.map(loc => {
+                // Monta info de cursos
+                let cursosInfo = '';
+                if (loc.todos_cursos) {
+                    cursosInfo = '<span class="badge bg-success">Todos os cursos</span>';
+                } else if (loc.cursos && loc.cursos.length > 0) {
+                    cursosInfo = loc.cursos.map(c => `<span class="badge bg-info">${c.nome}</span>`).join(' ');
+                } else {
+                    cursosInfo = '<span class="text-muted">-</span>';
+                }
+
+                // Monta info de alunos
+                let alunosInfo = '';
+                if (loc.todos_alunos) {
+                    alunosInfo = `<span class="badge bg-secondary" title="Todos os alunos dos cursos">${loc.total_alunos}</span>`;
+                } else if (loc.usuarios_especificos && loc.usuarios_especificos.length > 0) {
+                    const nomes = loc.usuarios_especificos.map(u => u.nome).join(', ');
+                    alunosInfo = `<span class="badge bg-warning text-dark" title="${nomes}">${loc.usuarios_especificos.length} específicos</span>`;
+                } else {
+                    alunosInfo = '<span class="text-muted">0</span>';
+                }
+
+                return `
                 <tr>
                     <td><strong>${loc.nome}</strong></td>
-                    <td>${loc.curso_nome ? `<span class="badge bg-info">${loc.curso_nome}</span>` : '<span class="text-muted">-</span>'}</td>
-                    <td><span class="badge bg-secondary">${loc.total_alunos}</span></td>
+                    <td>${cursosInfo}</td>
+                    <td>${alunosInfo}</td>
                     <td><small>${loc.latitude.toFixed(6)}, ${loc.longitude.toFixed(6)}</small></td>
                     <td>${loc.raio_metros}m</td>
                     <td>${loc.ativo ?
                         '<span class="badge bg-success">Ativo</span>' :
                         '<span class="badge bg-secondary">Inativo</span>'}</td>
                     <td>
+                        <button class="btn btn-sm btn-outline-primary" onclick="abrirEditarLocal(${loc.id})" title="Editar">
+                            <i class="bi bi-pencil"></i>
+                        </button>
                         <button class="btn btn-sm btn-outline-${loc.ativo ? 'warning' : 'success'}" onclick="toggleLocal(${loc.id}, ${loc.ativo})">
                             ${loc.ativo ? 'Desativar' : 'Ativar'}
                         </button>
@@ -822,7 +1016,7 @@ async function carregarLocais() {
                         </button>
                     </td>
                 </tr>
-            `).join('');
+            `}).join('');
         } else {
             tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted">Nenhum local cadastrado. Adicione pelo menos um local para habilitar o registro de presença por geolocalização.</td></tr>';
         }
@@ -858,11 +1052,17 @@ async function cadastrarLocal(event) {
         raio_metros: parseInt(document.getElementById('localRaio').value)
     };
 
-    // Se for super admin, adiciona o curso_id selecionado
+    // Se for super admin, adiciona configurações de cursos e alunos
     if (currentUser.is_super_admin) {
-        const cursoId = document.getElementById('localCurso').value;
-        if (cursoId) {
-            dados.curso_id = parseInt(cursoId);
+        dados.todos_cursos = document.getElementById('localTodosCursos').checked;
+        dados.todos_alunos = document.getElementById('localTodosAlunos').checked;
+
+        if (!dados.todos_cursos) {
+            dados.cursos_ids = Array.from(document.querySelectorAll('.curso-checkbox:checked')).map(cb => parseInt(cb.value));
+        }
+
+        if (!dados.todos_alunos) {
+            dados.usuarios_ids = Array.from(document.querySelectorAll('.aluno-checkbox:checked')).map(cb => parseInt(cb.value));
         }
     }
 
@@ -880,6 +1080,12 @@ async function cadastrarLocal(event) {
             alertEl.classList.remove('d-none');
             document.getElementById('formNovoLocal').reset();
             document.getElementById('localRaio').value = '100';
+            // Reseta checkboxes
+            document.querySelectorAll('.curso-checkbox, .aluno-checkbox').forEach(cb => cb.checked = false);
+            document.getElementById('localTodosCursos').checked = false;
+            document.getElementById('localTodosAlunos').checked = true;
+            toggleTodosCursos();
+            toggleTodosAlunos();
             carregarLocais();
         } else {
             const data = await response.json();
@@ -891,6 +1097,131 @@ async function cadastrarLocal(event) {
         alertEl.className = 'alert alert-danger mt-3';
         alertEl.textContent = 'Erro de conexão';
         alertEl.classList.remove('d-none');
+    }
+}
+
+// ============= EDIÇÃO DE LOCAL =============
+
+// Abrir modal de edição
+function abrirEditarLocal(localId) {
+    const local = locaisCache.find(l => l.id === localId);
+    if (!local) return;
+
+    // Preenche campos básicos
+    document.getElementById('editLocalId').value = local.id;
+    document.getElementById('editLocalNome').value = local.nome;
+    document.getElementById('editLocalLatitude').value = local.latitude;
+    document.getElementById('editLocalLongitude').value = local.longitude;
+    document.getElementById('editLocalRaio').value = local.raio_metros;
+
+    // Preenche checkboxes de cursos no modal de edição
+    const containerCursos = document.getElementById('editCheckboxCursos');
+    const cursosIds = local.cursos ? local.cursos.map(c => c.id) : [];
+    containerCursos.innerHTML = cursosDisponiveis.map(c => `
+        <div class="form-check">
+            <input class="form-check-input edit-curso-checkbox" type="checkbox" value="${c.id}" id="edit_curso_${c.id}"
+                   ${cursosIds.includes(c.id) ? 'checked' : ''} onchange="atualizarEditAlunosPorCurso()">
+            <label class="form-check-label" for="edit_curso_${c.id}">${c.nome}</label>
+        </div>
+    `).join('');
+
+    // Configura todos_cursos
+    document.getElementById('editLocalTodosCursos').checked = local.todos_cursos || false;
+    toggleEditTodosCursos();
+
+    // Configura todos_alunos
+    document.getElementById('editLocalTodosAlunos').checked = local.todos_alunos !== false;
+    toggleEditTodosAlunos();
+
+    // Preenche alunos específicos
+    atualizarEditAlunosPorCurso(local.usuarios_especificos || []);
+
+    // Abre modal
+    const modal = new bootstrap.Modal(document.getElementById('modalEditarLocal'));
+    modal.show();
+}
+
+// Toggle todos os cursos (editar)
+function toggleEditTodosCursos() {
+    const todosCursos = document.getElementById('editLocalTodosCursos').checked;
+    document.getElementById('editSelectCursosLocal').style.display = todosCursos ? 'none' : 'block';
+    atualizarEditAlunosPorCurso();
+}
+
+// Toggle todos os alunos (editar)
+function toggleEditTodosAlunos() {
+    const todosAlunos = document.getElementById('editLocalTodosAlunos').checked;
+    document.getElementById('editSelectAlunosLocal').style.display = todosAlunos ? 'none' : 'block';
+}
+
+// Atualizar lista de alunos no modal de edição
+function atualizarEditAlunosPorCurso(alunosSelecionados = []) {
+    const cursosSelecionados = Array.from(document.querySelectorAll('.edit-curso-checkbox:checked')).map(cb => parseInt(cb.value));
+    const todosCursos = document.getElementById('editLocalTodosCursos').checked;
+    const alunosIds = alunosSelecionados.map(a => a.id);
+
+    let alunosFiltrados = alunosDisponiveis;
+    if (!todosCursos && cursosSelecionados.length > 0) {
+        alunosFiltrados = alunosDisponiveis.filter(a => cursosSelecionados.includes(a.curso_id));
+    }
+
+    const container = document.getElementById('editCheckboxAlunos');
+    if (alunosFiltrados.length > 0) {
+        container.innerHTML = alunosFiltrados.map(a => `
+            <div class="form-check">
+                <input class="form-check-input edit-aluno-checkbox" type="checkbox" value="${a.id}" id="edit_aluno_${a.id}"
+                       ${alunosIds.includes(a.id) ? 'checked' : ''}>
+                <label class="form-check-label" for="edit_aluno_${a.id}">${a.nome} (${a.matricula})${a.curso_nome ? ' - ' + a.curso_nome : ''}</label>
+            </div>
+        `).join('');
+    } else {
+        container.innerHTML = '<p class="text-muted mb-0">Selecione pelo menos um curso</p>';
+    }
+}
+
+// Salvar edição de local
+async function salvarEdicaoLocal() {
+    const localId = document.getElementById('editLocalId').value;
+
+    const dados = {
+        nome: document.getElementById('editLocalNome').value,
+        latitude: parseFloat(document.getElementById('editLocalLatitude').value),
+        longitude: parseFloat(document.getElementById('editLocalLongitude').value),
+        raio_metros: parseInt(document.getElementById('editLocalRaio').value),
+        todos_cursos: document.getElementById('editLocalTodosCursos').checked,
+        todos_alunos: document.getElementById('editLocalTodosAlunos').checked
+    };
+
+    if (!dados.todos_cursos) {
+        dados.cursos_ids = Array.from(document.querySelectorAll('.edit-curso-checkbox:checked')).map(cb => parseInt(cb.value));
+    } else {
+        dados.cursos_ids = [];
+    }
+
+    if (!dados.todos_alunos) {
+        dados.usuarios_ids = Array.from(document.querySelectorAll('.edit-aluno-checkbox:checked')).map(cb => parseInt(cb.value));
+    } else {
+        dados.usuarios_ids = [];
+    }
+
+    try {
+        const response = await fetchWithAuth(`/admin/locations/${localId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(dados)
+        });
+
+        if (!response) return;
+        if (response.ok) {
+            bootstrap.Modal.getInstance(document.getElementById('modalEditarLocal')).hide();
+            carregarLocais();
+            alert('Local atualizado com sucesso!');
+        } else {
+            const data = await response.json();
+            alert(data.detail || 'Erro ao atualizar local');
+        }
+    } catch (error) {
+        alert('Erro de conexão');
     }
 }
 

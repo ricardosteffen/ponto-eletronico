@@ -68,19 +68,57 @@ def get_company_settings(db: Session) -> CompanySettings:
     return settings
 
 
-def check_all_locations(db: Session, user_lat: float, user_lon: float, curso_id: int = None):
+def check_all_locations(db: Session, user_lat: float, user_lon: float, user_id: int = None, curso_id: int = None):
     """
     Verifica se o usuário está dentro do raio de algum local cadastrado.
-    Se curso_id especificado, filtra apenas locais do curso.
+    Considera:
+    - Locais com todos_cursos = True
+    - Locais associados ao curso do usuário via location_cursos
+    - Locais com curso_id legado
+    - Se todos_alunos = False, verifica se usuário está na lista location_users
     Retorna: (dentro_raio, distancia, location_id, location_name)
     """
+    from sqlalchemy import or_
+    from app.models.models import location_cursos, location_users
+
+    # Busca locais disponíveis para o usuário
     query = db.query(Location).filter(Location.ativo == True)
+
     if curso_id:
-        query = query.filter(Location.curso_id == curso_id)
+        # Subquery para pegar IDs dos locais associados ao curso do usuário
+        subquery_cursos = db.query(location_cursos.c.location_id).filter(
+            location_cursos.c.curso_id == curso_id
+        )
+        # Filtra locais que:
+        # 1. São para todos os cursos OU
+        # 2. Estão na lista de cursos do usuário OU
+        # 3. Têm curso_id legado igual ao do usuário
+        query = query.filter(
+            or_(
+                Location.todos_cursos == True,
+                Location.id.in_(subquery_cursos),
+                Location.curso_id == curso_id
+            )
+        )
+
     locations = query.all()
 
-    if not locations:
-        # Se não há locais cadastrados, usa as configurações da empresa
+    # Filtra ainda por permissão de aluno específico
+    locations_validos = []
+    for loc in locations:
+        if loc.todos_alunos:
+            locations_validos.append(loc)
+        elif user_id:
+            # Verifica se usuário está na lista de usuários específicos
+            usuario_permitido = db.query(location_users).filter(
+                location_users.c.location_id == loc.id,
+                location_users.c.user_id == user_id
+            ).first()
+            if usuario_permitido:
+                locations_validos.append(loc)
+
+    if not locations_validos:
+        # Se não há locais cadastrados para o usuário, usa as configurações da empresa
         settings = get_company_settings(db)
         dentro_raio, distancia = is_within_radius(
             user_lat, user_lon,
@@ -93,7 +131,7 @@ def check_all_locations(db: Session, user_lat: float, user_lon: float, curso_id:
     melhor_match = None
     menor_distancia = float('inf')
 
-    for loc in locations:
+    for loc in locations_validos:
         dentro, dist = is_within_radius(
             user_lat, user_lon,
             loc.latitude, loc.longitude,
@@ -107,7 +145,7 @@ def check_all_locations(db: Session, user_lat: float, user_lon: float, curso_id:
         return True, menor_distancia, melhor_match.id, melhor_match.nome
 
     # Se não está em nenhum local, retorna o mais próximo
-    for loc in locations:
+    for loc in locations_validos:
         _, dist = is_within_radius(
             user_lat, user_lon,
             loc.latitude, loc.longitude,
@@ -202,9 +240,9 @@ async def registrar_ponto(
     else:
         tipo = 'saida'
 
-    # Valida geolocalização contra locais do curso do usuário
+    # Valida geolocalização contra locais disponíveis para o usuário
     dentro_raio, distancia, location_id, location_name = check_all_locations(
-        db, latitude, longitude, current_user.curso_id
+        db, latitude, longitude, current_user.id, current_user.curso_id
     )
 
     # Processa foto se enviada
