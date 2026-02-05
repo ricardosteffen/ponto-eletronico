@@ -10,7 +10,7 @@ import csv
 import io
 import os
 from app.database import get_db
-from app.models.models import User, TimeRecord, CompanySettings, Location
+from app.models.models import User, TimeRecord, CompanySettings, Location, Curso
 from app.utils.auth import get_current_admin
 from config import DEFAULT_COMPANY_LATITUDE, DEFAULT_COMPANY_LONGITUDE, DEFAULT_ALLOWED_RADIUS_METERS
 from reportlab.lib import colors
@@ -29,6 +29,8 @@ class UserListResponse(BaseModel):
     matricula: str
     is_admin: bool
     ativo: bool
+    curso_id: Optional[int] = None
+    curso_nome: Optional[str] = None
 
     class Config:
         from_attributes = True
@@ -57,12 +59,14 @@ class RegistroRelatorio(BaseModel):
     user_id: int
     nome_funcionario: str
     matricula: str
+    curso_nome: Optional[str] = None
     tipo: str
     timestamp: datetime
     latitude: Optional[float]
     longitude: Optional[float]
     dentro_raio: bool
     face_detected: Optional[bool] = None
+    foto_url: Optional[str] = None
 
 
 class RelatorioResponse(BaseModel):
@@ -75,6 +79,7 @@ class ResumoFuncionario(BaseModel):
     user_id: int
     nome: str
     matricula: str
+    curso_nome: Optional[str] = None
     total_horas: str
     dias_trabalhados: int
     registros_fora_raio: int
@@ -117,7 +122,26 @@ async def list_users(
     if not current_admin.is_super_admin and current_admin.curso_id:
         query = query.filter(User.curso_id == current_admin.curso_id)
     users = query.order_by(User.nome).all()
-    return [UserListResponse.model_validate(u) for u in users]
+
+    result = []
+    for user in users:
+        curso_nome = None
+        if user.curso_id:
+            curso = db.query(Curso).filter(Curso.id == user.curso_id).first()
+            curso_nome = curso.nome if curso else None
+
+        result.append(UserListResponse(
+            id=user.id,
+            nome=user.nome,
+            email=user.email,
+            matricula=user.matricula,
+            is_admin=user.is_admin,
+            ativo=user.ativo,
+            curso_id=user.curso_id,
+            curso_nome=curso_nome
+        ))
+
+    return result
 
 
 @router.get("/settings", response_model=CompanySettingsResponse)
@@ -203,19 +227,39 @@ async def get_relatorio(
 
     registros = []
     user_ids = set()
+    # Cache de cursos para evitar múltiplas queries
+    cursos_cache = {}
+
     for record, user in results:
         user_ids.add(user.id)
+        # Gera URL da foto se existir
+        foto_url = None
+        if record.foto_path:
+            # Extrai apenas o nome do arquivo para construir a URL
+            foto_filename = os.path.basename(record.foto_path)
+            foto_url = f"/uploads/fotos/{foto_filename}"
+
+        # Busca nome do curso (com cache)
+        curso_nome = None
+        if user.curso_id:
+            if user.curso_id not in cursos_cache:
+                curso = db.query(Curso).filter(Curso.id == user.curso_id).first()
+                cursos_cache[user.curso_id] = curso.nome if curso else None
+            curso_nome = cursos_cache[user.curso_id]
+
         registros.append(RegistroRelatorio(
             id=record.id,
             user_id=user.id,
             nome_funcionario=user.nome,
             matricula=user.matricula,
+            curso_nome=curso_nome,
             tipo=record.tipo,
             timestamp=record.timestamp,
             latitude=record.latitude,
             longitude=record.longitude,
             dentro_raio=record.dentro_raio,
-            face_detected=record.face_detected
+            face_detected=record.face_detected,
+            foto_url=foto_url
         ))
 
     return RelatorioResponse(
@@ -247,6 +291,9 @@ async def get_relatorio_resumo(
     users = query.all()
 
     funcionarios = []
+    # Cache de cursos
+    cursos_cache = {}
+
     for user in users:
         registros = db.query(TimeRecord).filter(
             and_(
@@ -261,10 +308,19 @@ async def get_relatorio_resumo(
             dias_unicos = set(r.timestamp.date() for r in registros)
             fora_raio = sum(1 for r in registros if not r.dentro_raio)
 
+            # Busca nome do curso (com cache)
+            curso_nome = None
+            if user.curso_id:
+                if user.curso_id not in cursos_cache:
+                    curso = db.query(Curso).filter(Curso.id == user.curso_id).first()
+                    cursos_cache[user.curso_id] = curso.nome if curso else None
+                curso_nome = cursos_cache[user.curso_id]
+
             funcionarios.append(ResumoFuncionario(
                 user_id=user.id,
                 nome=user.nome,
                 matricula=user.matricula,
+                curso_nome=curso_nome,
                 total_horas=formatar_horas(total_horas),
                 dias_trabalhados=len(dias_unicos),
                 registros_fora_raio=fora_raio

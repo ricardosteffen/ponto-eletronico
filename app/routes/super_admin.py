@@ -1,8 +1,11 @@
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from pydantic import BaseModel, EmailStr
 from typing import List, Optional
 from datetime import datetime
+import csv
+import io
 
 from app.database import get_db
 from app.models.models import User, Curso, Location, TimeRecord
@@ -291,6 +294,90 @@ async def create_admin(
     )
 
 
+@router.delete("/admins/{admin_id}")
+async def delete_admin(
+    admin_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_super_admin)
+):
+    """Remove um administrador (não pode remover super admin ou a si mesmo)."""
+    admin = db.query(User).filter(User.id == admin_id).first()
+    if not admin:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Usuário não encontrado"
+        )
+
+    if admin.is_super_admin:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Não é possível remover um super administrador"
+        )
+
+    if admin.id == current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Você não pode remover sua própria conta"
+        )
+
+    # Remove registros de ponto do usuário
+    db.query(TimeRecord).filter(TimeRecord.user_id == admin_id).delete()
+
+    # Remove o usuário
+    db.delete(admin)
+    db.commit()
+
+    return {"message": f"Usuário {admin.nome} removido com sucesso"}
+
+
+@router.put("/users/{user_id}/toggle-admin", response_model=AdminResponse)
+async def toggle_user_admin(
+    user_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_super_admin)
+):
+    """Promove ou rebaixa um usuário para/de administrador."""
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Usuário não encontrado"
+        )
+
+    if user.is_super_admin:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Não é possível alterar um super administrador"
+        )
+
+    if user.id == current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Você não pode alterar seu próprio status"
+        )
+
+    # Toggle admin status
+    user.is_admin = not user.is_admin
+    db.commit()
+    db.refresh(user)
+
+    # Busca nome do curso
+    curso_nome = None
+    if user.curso_id:
+        curso = db.query(Curso).filter(Curso.id == user.curso_id).first()
+        curso_nome = curso.nome if curso else None
+
+    return AdminResponse(
+        id=user.id,
+        nome=user.nome,
+        email=user.email,
+        matricula=user.matricula,
+        is_admin=user.is_admin,
+        curso_id=user.curso_id,
+        curso_nome=curso_nome
+    )
+
+
 # ============= ESTATÍSTICAS =============
 
 @router.get("/stats", response_model=List[CursoStats])
@@ -333,3 +420,114 @@ async def get_stats(
         ))
 
     return stats
+
+
+# ============= ROTAS DE ALUNOS =============
+
+class AlunoResponse(BaseModel):
+    id: int
+    nome: str
+    email: str
+    matricula: str
+    is_admin: bool
+    ativo: bool
+    curso_id: Optional[int] = None
+    curso_nome: Optional[str] = None
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+@router.get("/alunos", response_model=List[AlunoResponse])
+async def list_alunos(
+    curso_id: Optional[int] = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_super_admin)
+):
+    """Lista todos os alunos, opcionalmente filtrado por curso."""
+    query = db.query(User).filter(User.is_super_admin == False)
+
+    if curso_id:
+        query = query.filter(User.curso_id == curso_id)
+
+    users = query.order_by(User.nome).all()
+
+    # Cache de cursos
+    cursos_cache = {}
+
+    result = []
+    for user in users:
+        curso_nome = None
+        if user.curso_id:
+            if user.curso_id not in cursos_cache:
+                curso = db.query(Curso).filter(Curso.id == user.curso_id).first()
+                cursos_cache[user.curso_id] = curso.nome if curso else None
+            curso_nome = cursos_cache[user.curso_id]
+
+        result.append(AlunoResponse(
+            id=user.id,
+            nome=user.nome,
+            email=user.email,
+            matricula=user.matricula,
+            is_admin=user.is_admin,
+            ativo=user.ativo,
+            curso_id=user.curso_id,
+            curso_nome=curso_nome,
+            created_at=user.created_at
+        ))
+
+    return result
+
+
+@router.get("/alunos/export")
+async def export_alunos(
+    curso_id: Optional[int] = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_super_admin)
+):
+    """Exporta lista de alunos em CSV."""
+    query = db.query(User).filter(User.is_super_admin == False)
+
+    curso_nome_filtro = "Todos"
+    if curso_id:
+        query = query.filter(User.curso_id == curso_id)
+        curso = db.query(Curso).filter(Curso.id == curso_id).first()
+        if curso:
+            curso_nome_filtro = curso.nome
+
+    users = query.order_by(User.nome).all()
+
+    # Cache de cursos
+    cursos_cache = {}
+
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(['Nome', 'Email', 'Matrícula', 'Curso', 'Tipo', 'Status', 'Data Cadastro'])
+
+    for user in users:
+        curso_nome = None
+        if user.curso_id:
+            if user.curso_id not in cursos_cache:
+                curso = db.query(Curso).filter(Curso.id == user.curso_id).first()
+                cursos_cache[user.curso_id] = curso.nome if curso else None
+            curso_nome = cursos_cache[user.curso_id]
+
+        writer.writerow([
+            user.nome,
+            user.email,
+            user.matricula,
+            curso_nome or '-',
+            'Admin' if user.is_admin else 'Aluno',
+            'Ativo' if user.ativo else 'Inativo',
+            user.created_at.strftime('%d/%m/%Y') if user.created_at else '-'
+        ])
+
+    output.seek(0)
+    filename = f"alunos_{curso_nome_filtro.lower().replace(' ', '_')}_{datetime.now().strftime('%Y%m%d')}.csv"
+
+    return StreamingResponse(
+        iter([output.getvalue()]),
+        media_type="text/csv",
+        headers={"Content-Disposition": f"attachment; filename={filename}"}
+    )

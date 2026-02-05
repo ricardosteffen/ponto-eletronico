@@ -316,6 +316,39 @@ async def signup(
     return UserResponse.model_validate(new_user)
 
 
+class ChangePasswordRequest(BaseModel):
+    senha_atual: str
+    nova_senha: str
+
+
+@router.put("/change-password")
+async def change_password(
+    password_data: ChangePasswordRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Permite que o usuário troque sua própria senha."""
+    # Verifica se a senha atual está correta
+    if not verify_password(password_data.senha_atual, current_user.senha_hash):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Senha atual incorreta"
+        )
+
+    # Valida a nova senha
+    if len(password_data.nova_senha) < 4:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="A nova senha deve ter pelo menos 4 caracteres"
+        )
+
+    # Atualiza a senha
+    current_user.senha_hash = get_password_hash(password_data.nova_senha)
+    db.commit()
+
+    return {"message": "Senha alterada com sucesso"}
+
+
 @router.delete("/users/{user_id}")
 async def delete_user(
     user_id: int,

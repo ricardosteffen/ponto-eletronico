@@ -55,6 +55,7 @@
                             <li><span class="dropdown-item-text text-muted" id="userMatricula"></span></li>
                             <li><span class="dropdown-item-text text-muted small" id="userCurso"></span></li>
                             <li><hr class="dropdown-divider"></li>
+                            <li><a class="dropdown-item" href="#" onclick="abrirModalSenha()"><i class="bi bi-key"></i> Trocar Senha</a></li>
                             <li><a class="dropdown-item" href="#" onclick="logout()"><i class="bi bi-box-arrow-right"></i> Sair</a></li>
                         </ul>
                     </li>
@@ -66,6 +67,38 @@
     <main class="py-4">
         {% block content %}{% endblock %}
     </main>
+
+    <!-- Modal Trocar Senha -->
+    <div class="modal fade" id="modalTrocarSenha" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header bg-primary text-white">
+                    <h5 class="modal-title"><i class="bi bi-key"></i> Trocar Senha</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="formTrocarSenha" onsubmit="trocarSenha(event)">
+                        <div class="mb-3">
+                            <label class="form-label">Senha Atual</label>
+                            <input type="password" class="form-control" id="senhaAtual" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Nova Senha</label>
+                            <input type="password" class="form-control" id="novaSenha" required minlength="4">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Confirmar Nova Senha</label>
+                            <input type="password" class="form-control" id="confirmarSenha" required minlength="4">
+                        </div>
+                        <div id="alertSenha" class="alert d-none"></div>
+                        <button type="submit" class="btn btn-primary w-100">
+                            <i class="bi bi-check-circle"></i> Alterar Senha
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
 
     <footer class="footer mt-auto py-3 bg-light" id="mainFooter" style="display: none;">
         <div class="container text-center">
@@ -118,6 +151,64 @@
             navigator.serviceWorker.register('/static/sw.js')
                 .then(reg => console.log('Service Worker registrado'))
                 .catch(err => console.log('Erro no Service Worker:', err));
+        }
+
+        // Funções de troca de senha
+        function abrirModalSenha() {
+            document.getElementById('formTrocarSenha').reset();
+            document.getElementById('alertSenha').classList.add('d-none');
+            const modal = new bootstrap.Modal(document.getElementById('modalTrocarSenha'));
+            modal.show();
+        }
+
+        async function trocarSenha(event) {
+            event.preventDefault();
+            const alertEl = document.getElementById('alertSenha');
+            const novaSenha = document.getElementById('novaSenha').value;
+            const confirmarSenha = document.getElementById('confirmarSenha').value;
+
+            // Valida se as senhas conferem
+            if (novaSenha !== confirmarSenha) {
+                alertEl.className = 'alert alert-danger';
+                alertEl.textContent = 'As senhas não conferem';
+                alertEl.classList.remove('d-none');
+                return;
+            }
+
+            try {
+                const response = await fetchWithAuth('/auth/change-password', {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        senha_atual: document.getElementById('senhaAtual').value,
+                        nova_senha: novaSenha
+                    })
+                });
+
+                if (!response) return;
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    alertEl.className = 'alert alert-success';
+                    alertEl.textContent = 'Senha alterada com sucesso!';
+                    alertEl.classList.remove('d-none');
+                    document.getElementById('formTrocarSenha').reset();
+
+                    // Fecha o modal após 2 segundos
+                    setTimeout(() => {
+                        bootstrap.Modal.getInstance(document.getElementById('modalTrocarSenha')).hide();
+                    }, 2000);
+                } else {
+                    alertEl.className = 'alert alert-danger';
+                    alertEl.textContent = data.detail || 'Erro ao alterar senha';
+                    alertEl.classList.remove('d-none');
+                }
+            } catch (error) {
+                alertEl.className = 'alert alert-danger';
+                alertEl.textContent = 'Erro de conexão';
+                alertEl.classList.remove('d-none');
+            }
         }
 
         // Prompt de instalação PWA
