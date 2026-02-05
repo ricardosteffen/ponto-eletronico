@@ -262,13 +262,13 @@
                                     </div>
                                 </div>
 
-                                <!-- Configuração de Alunos (apenas super admin) -->
+                                <!-- Configuração de Alunos (todos os admins) -->
                                 <div id="configAlunosLocal" style="display: none;">
                                     <hr>
                                     <h6 class="mb-3"><i class="bi bi-people"></i> Alunos</h6>
                                     <div class="mb-3 form-check">
                                         <input type="checkbox" class="form-check-input" id="localTodosAlunos" checked onchange="toggleTodosAlunos()">
-                                        <label class="form-check-label" for="localTodosAlunos">Disponível para todos os alunos dos cursos selecionados</label>
+                                        <label class="form-check-label" for="localTodosAlunos">Disponível para todos os alunos do curso</label>
                                     </div>
                                     <div id="selectAlunosLocal" class="mb-3" style="display: none;">
                                         <label class="form-label">Selecione os alunos específicos</label>
@@ -883,13 +883,18 @@ let cursosDisponiveis = [];
 let alunosDisponiveis = [];
 let locaisCache = [];
 
-// Carregar cursos e configurar formulário (apenas super admin)
+// Carregar cursos e configurar formulário
 async function carregarCursosParaLocal() {
+    // Sempre mostra configuração de alunos para qualquer admin
+    document.getElementById('configAlunosLocal').style.display = 'block';
+
+    // Carrega alunos do curso (ou todos se super admin)
+    await carregarAlunosParaLocal();
+
+    // Configuração de cursos apenas para super admin
     if (!currentUser.is_super_admin) return;
 
-    // Mostra configurações avançadas
     document.getElementById('configCursosLocal').style.display = 'block';
-    document.getElementById('configAlunosLocal').style.display = 'block';
 
     try {
         const response = await fetchWithAuth('/auth/cursos');
@@ -904,9 +909,6 @@ async function carregarCursosParaLocal() {
                 <label class="form-check-label" for="curso_${c.id}">${c.nome}</label>
             </div>
         `).join('');
-
-        // Carrega alunos
-        await carregarAlunosParaLocal();
     } catch (error) {
         console.error('Erro ao carregar cursos:', error);
     }
@@ -926,28 +928,33 @@ async function carregarAlunosParaLocal() {
 
 // Atualizar lista de alunos baseado nos cursos selecionados
 function atualizarAlunosPorCurso() {
-    const cursosSelecionados = Array.from(document.querySelectorAll('.curso-checkbox:checked')).map(cb => parseInt(cb.value));
-    const todosCursos = document.getElementById('localTodosCursos').checked;
-
     let alunosFiltrados = alunosDisponiveis;
-    if (!todosCursos && cursosSelecionados.length > 0) {
-        alunosFiltrados = alunosDisponiveis.filter(a => cursosSelecionados.includes(a.curso_id));
+
+    // Super admin: filtra por cursos selecionados
+    if (currentUser.is_super_admin) {
+        const cursosSelecionados = Array.from(document.querySelectorAll('.curso-checkbox:checked')).map(cb => parseInt(cb.value));
+        const todosCursos = document.getElementById('localTodosCursos').checked;
+
+        if (!todosCursos && cursosSelecionados.length > 0) {
+            alunosFiltrados = alunosDisponiveis.filter(a => cursosSelecionados.includes(a.curso_id));
+        }
     }
+    // Admin de curso: já recebe apenas alunos do seu curso do backend
 
     const container = document.getElementById('checkboxAlunos');
     if (alunosFiltrados.length > 0) {
         container.innerHTML = alunosFiltrados.map(a => `
             <div class="form-check">
                 <input class="form-check-input aluno-checkbox" type="checkbox" value="${a.id}" id="aluno_${a.id}">
-                <label class="form-check-label" for="aluno_${a.id}">${a.nome} (${a.matricula})${a.curso_nome ? ' - ' + a.curso_nome : ''}</label>
+                <label class="form-check-label" for="aluno_${a.id}">${a.nome} (${a.matricula})${currentUser.is_super_admin && a.curso_nome ? ' - ' + a.curso_nome : ''}</label>
             </div>
         `).join('');
     } else {
-        container.innerHTML = '<p class="text-muted mb-0">Selecione pelo menos um curso</p>';
+        container.innerHTML = '<p class="text-muted mb-0">' + (currentUser.is_super_admin ? 'Selecione pelo menos um curso' : 'Nenhum aluno encontrado') + '</p>';
     }
 }
 
-// Toggle todos os cursos (criar)
+// Toggle todos os cursos (criar) - apenas super admin
 function toggleTodosCursos() {
     const todosCursos = document.getElementById('localTodosCursos').checked;
     document.getElementById('selectCursosLocal').style.display = todosCursos ? 'none' : 'block';
@@ -1052,17 +1059,17 @@ async function cadastrarLocal(event) {
         raio_metros: parseInt(document.getElementById('localRaio').value)
     };
 
-    // Se for super admin, adiciona configurações de cursos e alunos
+    // Configuração de alunos (todos os admins)
+    dados.todos_alunos = document.getElementById('localTodosAlunos').checked;
+    if (!dados.todos_alunos) {
+        dados.usuarios_ids = Array.from(document.querySelectorAll('.aluno-checkbox:checked')).map(cb => parseInt(cb.value));
+    }
+
+    // Se for super admin, adiciona configurações de cursos
     if (currentUser.is_super_admin) {
         dados.todos_cursos = document.getElementById('localTodosCursos').checked;
-        dados.todos_alunos = document.getElementById('localTodosAlunos').checked;
-
         if (!dados.todos_cursos) {
             dados.cursos_ids = Array.from(document.querySelectorAll('.curso-checkbox:checked')).map(cb => parseInt(cb.value));
-        }
-
-        if (!dados.todos_alunos) {
-            dados.usuarios_ids = Array.from(document.querySelectorAll('.aluno-checkbox:checked')).map(cb => parseInt(cb.value));
         }
     }
 
@@ -1114,22 +1121,30 @@ function abrirEditarLocal(localId) {
     document.getElementById('editLocalLongitude').value = local.longitude;
     document.getElementById('editLocalRaio').value = local.raio_metros;
 
-    // Preenche checkboxes de cursos no modal de edição
-    const containerCursos = document.getElementById('editCheckboxCursos');
-    const cursosIds = local.cursos ? local.cursos.map(c => c.id) : [];
-    containerCursos.innerHTML = cursosDisponiveis.map(c => `
-        <div class="form-check">
-            <input class="form-check-input edit-curso-checkbox" type="checkbox" value="${c.id}" id="edit_curso_${c.id}"
-                   ${cursosIds.includes(c.id) ? 'checked' : ''} onchange="atualizarEditAlunosPorCurso()">
-            <label class="form-check-label" for="edit_curso_${c.id}">${c.nome}</label>
-        </div>
-    `).join('');
+    // Configurações de cursos apenas para super admin
+    if (currentUser.is_super_admin) {
+        document.getElementById('editConfigCursosLocal').style.display = 'block';
 
-    // Configura todos_cursos
-    document.getElementById('editLocalTodosCursos').checked = local.todos_cursos || false;
-    toggleEditTodosCursos();
+        // Preenche checkboxes de cursos no modal de edição
+        const containerCursos = document.getElementById('editCheckboxCursos');
+        const cursosIds = local.cursos ? local.cursos.map(c => c.id) : [];
+        containerCursos.innerHTML = cursosDisponiveis.map(c => `
+            <div class="form-check">
+                <input class="form-check-input edit-curso-checkbox" type="checkbox" value="${c.id}" id="edit_curso_${c.id}"
+                       ${cursosIds.includes(c.id) ? 'checked' : ''} onchange="atualizarEditAlunosPorCurso()">
+                <label class="form-check-label" for="edit_curso_${c.id}">${c.nome}</label>
+            </div>
+        `).join('');
 
-    // Configura todos_alunos
+        // Configura todos_cursos
+        document.getElementById('editLocalTodosCursos').checked = local.todos_cursos || false;
+        toggleEditTodosCursos();
+    } else {
+        // Admin de curso: esconde opções de cursos
+        document.getElementById('editConfigCursosLocal').style.display = 'none';
+    }
+
+    // Configura todos_alunos (todos os admins)
     document.getElementById('editLocalTodosAlunos').checked = local.todos_alunos !== false;
     toggleEditTodosAlunos();
 
@@ -1141,8 +1156,9 @@ function abrirEditarLocal(localId) {
     modal.show();
 }
 
-// Toggle todos os cursos (editar)
+// Toggle todos os cursos (editar) - apenas super admin
 function toggleEditTodosCursos() {
+    if (!currentUser.is_super_admin) return;
     const todosCursos = document.getElementById('editLocalTodosCursos').checked;
     document.getElementById('editSelectCursosLocal').style.display = todosCursos ? 'none' : 'block';
     atualizarEditAlunosPorCurso();
@@ -1156,14 +1172,19 @@ function toggleEditTodosAlunos() {
 
 // Atualizar lista de alunos no modal de edição
 function atualizarEditAlunosPorCurso(alunosSelecionados = []) {
-    const cursosSelecionados = Array.from(document.querySelectorAll('.edit-curso-checkbox:checked')).map(cb => parseInt(cb.value));
-    const todosCursos = document.getElementById('editLocalTodosCursos').checked;
     const alunosIds = alunosSelecionados.map(a => a.id);
-
     let alunosFiltrados = alunosDisponiveis;
-    if (!todosCursos && cursosSelecionados.length > 0) {
-        alunosFiltrados = alunosDisponiveis.filter(a => cursosSelecionados.includes(a.curso_id));
+
+    // Super admin: filtra por cursos selecionados
+    if (currentUser.is_super_admin) {
+        const cursosSelecionados = Array.from(document.querySelectorAll('.edit-curso-checkbox:checked')).map(cb => parseInt(cb.value));
+        const todosCursos = document.getElementById('editLocalTodosCursos').checked;
+
+        if (!todosCursos && cursosSelecionados.length > 0) {
+            alunosFiltrados = alunosDisponiveis.filter(a => cursosSelecionados.includes(a.curso_id));
+        }
     }
+    // Admin de curso: já recebe apenas alunos do seu curso do backend
 
     const container = document.getElementById('editCheckboxAlunos');
     if (alunosFiltrados.length > 0) {
@@ -1171,11 +1192,11 @@ function atualizarEditAlunosPorCurso(alunosSelecionados = []) {
             <div class="form-check">
                 <input class="form-check-input edit-aluno-checkbox" type="checkbox" value="${a.id}" id="edit_aluno_${a.id}"
                        ${alunosIds.includes(a.id) ? 'checked' : ''}>
-                <label class="form-check-label" for="edit_aluno_${a.id}">${a.nome} (${a.matricula})${a.curso_nome ? ' - ' + a.curso_nome : ''}</label>
+                <label class="form-check-label" for="edit_aluno_${a.id}">${a.nome} (${a.matricula})${currentUser.is_super_admin && a.curso_nome ? ' - ' + a.curso_nome : ''}</label>
             </div>
         `).join('');
     } else {
-        container.innerHTML = '<p class="text-muted mb-0">Selecione pelo menos um curso</p>';
+        container.innerHTML = '<p class="text-muted mb-0">' + (currentUser.is_super_admin ? 'Selecione pelo menos um curso' : 'Nenhum aluno encontrado') + '</p>';
     }
 }
 
@@ -1188,20 +1209,24 @@ async function salvarEdicaoLocal() {
         latitude: parseFloat(document.getElementById('editLocalLatitude').value),
         longitude: parseFloat(document.getElementById('editLocalLongitude').value),
         raio_metros: parseInt(document.getElementById('editLocalRaio').value),
-        todos_cursos: document.getElementById('editLocalTodosCursos').checked,
         todos_alunos: document.getElementById('editLocalTodosAlunos').checked
     };
 
-    if (!dados.todos_cursos) {
-        dados.cursos_ids = Array.from(document.querySelectorAll('.edit-curso-checkbox:checked')).map(cb => parseInt(cb.value));
-    } else {
-        dados.cursos_ids = [];
-    }
-
+    // Configuração de alunos (todos os admins)
     if (!dados.todos_alunos) {
         dados.usuarios_ids = Array.from(document.querySelectorAll('.edit-aluno-checkbox:checked')).map(cb => parseInt(cb.value));
     } else {
         dados.usuarios_ids = [];
+    }
+
+    // Configuração de cursos apenas para super admin
+    if (currentUser.is_super_admin) {
+        dados.todos_cursos = document.getElementById('editLocalTodosCursos').checked;
+        if (!dados.todos_cursos) {
+            dados.cursos_ids = Array.from(document.querySelectorAll('.edit-curso-checkbox:checked')).map(cb => parseInt(cb.value));
+        } else {
+            dados.cursos_ids = [];
+        }
     }
 
     try {
